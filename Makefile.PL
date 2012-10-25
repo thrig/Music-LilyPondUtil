@@ -6,8 +6,9 @@ WriteMakefile(
   VERSION_FROM => 'lib/Music/LilyPondUtil.pm',
   LICENSE      => 'perl',
   PREREQ_PM    => {
-    Carp       => 0,
-    Test::More => 0,
+    Carp         => 0,
+    Scalar::Util => 0,
+    Test::More   => 0,
   },
   ( $] >= 5.005
     ? (
