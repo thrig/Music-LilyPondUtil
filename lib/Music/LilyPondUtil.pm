@@ -10,7 +10,7 @@ use warnings;
 use Carp qw(croak);
 use Scalar::Util qw(blessed looks_like_number);
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
@@ -49,16 +49,16 @@ sub new {
   my $self = {};
 
   $self->{_mode} = $param{mode} || 'absolute';
-  croak("mode must be 'absolute' or 'relative'")
+  croak("'mode' must be 'absolute' or 'relative'")
     if $self->{_mode} ne 'absolute' and $self->{_mode} ne 'relative';
 
   $self->{_chrome} = $param{chrome} || 'sharps';
-  croak("unknown CHROME conversion style")
+  croak("unknown 'chrome' conversion style")
     unless exists $P2N{ $self->{_chrome} };
 
   $self->{_p2n_hook} = $param{p2n_hook}
     || sub { $P2N{ $_[1] }->{ $_[0] % $DEG_IN_SCALE } };
-  croak("P2N_HOOK must be code ref") unless ref $self->{_p2n_hook} eq 'CODE';
+  croak("'p2n_hook' must be code ref") unless ref $self->{_p2n_hook} eq 'CODE';
 
   bless $self, $class;
   return $self;
