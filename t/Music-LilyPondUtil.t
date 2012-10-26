@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 23;
+use Test::More tests => 30;
 BEGIN { use_ok('Music::LilyPondUtil') }
 
 my $lyu = Music::LilyPondUtil->new;
@@ -50,8 +50,16 @@ is_deeply(
   'relative sharps tritone no leap'
 );
 
-# TODO also must do contrary-to-default tritones, tritones at +/-
-# various octaves
+is_deeply(
+  [ $lyu->p2ly(
+      qw{59 65 59 60 54 60 61 67 61 62 56 62 63 69 63 64 58 64 65 59 65 66 72 66 67 61 67 68 74 68 69 63 69 70 76 70}
+    )
+  ],
+  [ split ' ',
+    q{b f' b, c fis, c' cis g' cis, d gis, d' dis a' dis, e ais, e' f b, f' fis c' fis, g cis, g' gis d' gis, a dis, a' ais e' ais,}
+  ],
+  'relative sharps tritone leap'
+);
 
 is_deeply(
   [ $lyu->p2ly(
@@ -96,6 +104,29 @@ is_deeply(
 
 is( $lyu->chrome('flats'), 'flats', 'switch to flats' );
 
+# tritones are tricky in relative mode
+is_deeply(
+  [ $lyu->p2ly(
+      qw{59 53 59 60 54 60 61 67 61 62 56 62 63 69 63 64 58 64 65 71 65 66 72 66 67 61 67 68 74 68 69 63 69 70 76 70}
+    )
+  ],
+  [ split ' ',
+    q{b f b c ges c des g des d aes d ees a ees e bes e f b f ges c ges g des g aes d aes a ees a bes e bes}
+  ],
+  'relative sharps tritone no leap'
+);
+
+is_deeply(
+  [ $lyu->p2ly(
+      qw{59 65 59 60 66 60 61 55 61 62 68 62 63 57 63 64 70 64 65 59 65 66 60 66 67 73 67 68 62 68 69 75 69 70 64 70}
+    )
+  ],
+  [ split ' ',
+    q{b f' b, c ges' c, des g, des' d aes' d, ees a, ees' e bes' e, f b, f' ges c, ges' g des' g, aes d, aes' a ees' a, bes e, bes'}
+  ],
+  'relative sharps tritone leap'
+);
+
 is_deeply(
   [ $lyu->p2ly(
       qw{60 62 60 65 60 66 60 67 60 69 60 78 60 79 60 62 67 62 68 62 69 62 80 62 81 62}
@@ -131,7 +162,13 @@ is_deeply(
 );
 
 ########################################################################
+#
+# Various new() params
 
-# TODO test 'mode', 'chrome' param to new call
-#$lyu = Music::LilyPondUtil->new();
-#isa_ok( $lyu, 'Music::LilyPondUtil' );
+$lyu = Music::LilyPondUtil->new( mode => 'relative' );
+isa_ok( $lyu, 'Music::LilyPondUtil' );
+is( $lyu->mode, 'relative' );
+
+$lyu = Music::LilyPondUtil->new( chrome => 'flats' );
+isa_ok( $lyu, 'Music::LilyPondUtil' );
+is( $lyu->chrome, 'flats' );

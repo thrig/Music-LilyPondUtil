@@ -48,15 +48,15 @@ sub new {
   my ( $class, %param ) = @_;
   my $self = {};
 
-  $self->{_mode} = $param{MODE} || 'absolute';
+  $self->{_mode} = $param{mode} || 'absolute';
   croak("mode must be 'absolute' or 'relative'")
     if $self->{_mode} ne 'absolute' and $self->{_mode} ne 'relative';
 
-  $self->{_chrome} = $param{CHROME} || 'sharps';
+  $self->{_chrome} = $param{chrome} || 'sharps';
   croak("unknown CHROME conversion style")
     unless exists $P2N{ $self->{_chrome} };
 
-  $self->{_p2n_hook} = $param{P2N_HOOK}
+  $self->{_p2n_hook} = $param{p2n_hook}
     || sub { $P2N{ $_[1] }->{ $_[0] % $DEG_IN_SCALE } };
   croak("P2N_HOOK must be code ref") unless ref $self->{_p2n_hook} eq 'CODE';
 
@@ -123,7 +123,7 @@ sub p2ly {
             }
 
           } else {    # not tritone, but leap
-            # TT adjust is to push <1 leaps out so become 1
+                      # TT adjust is to push <1 leaps out so become 1
             $rel_reg +=
               int( ( $delta + ( $delta > 0 ? $TRITONE : -$TRITONE ) ) /
                 $DEG_IN_SCALE );
@@ -158,6 +158,36 @@ Music::LilyPondUtil - utility methods for lilypond data
 =head1 DESCRIPTION
 
 Utility methods for interacting with lilypond.
+
+=head1 METHODS
+
+The module will throw errors via B<croak> if an abnormal condition is
+encountered.
+
+=over 4
+
+=item B<new> I<optional params>
+
+Constructor. Optional parameters are B<mode> to set C<absolute> or
+C<relative> mode, B<chrome> to set the accidental style (C<sharps> or
+C<flats), and B<p2n_hook> to set a custom code reference for the pitch
+to note conversion (untested, see source for details).
+
+=item B<chrome> I<optional sharps or flats>
+
+Get/set accidental style.
+
+=item B<mode> I<optional relative or absolute>
+
+Get/set the mode of operation.
+
+=item B<p2ly> I<list of pitches or whatnot>
+
+Converts a list of pitches (integers or objects that have a B<pitch>
+method that returns an integer) to a list of lilypond note names.
+Unknown data will be passed through as is.
+
+=back
 
 =head1 SEE ALSO
 
