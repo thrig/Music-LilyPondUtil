@@ -1,4 +1,6 @@
-# http://www.lilypond.org/
+# http://www.lilypond.org/ related utility code (mostly to
+# transition between Perl processing integers and the related
+# appropriate letter names for the black dots in lilypond).
 
 package Music::LilyPondUtil;
 
@@ -10,8 +12,11 @@ use Scalar::Util qw(blessed looks_like_number);
 
 our $VERSION = '0.01';
 
+# Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
-my %REGISTERS    = (
+my $TRITONE      = 6;
+# this used by both absoluate and relative mode
+my %REGISTERS = (
   0 => q(,,,,),
   1 => q(,,,),
   2 => q(,,),
@@ -23,12 +28,16 @@ my %REGISTERS    = (
   8 => q(''''),
   9 => q('''''),
 );
-my $REL_DEF_REG = 4;
-my %P2N         = (
-  'sharps' =>
-    {qw/0 c 1 cis 2 d 3 dis 4 e 5 f 6 fis 7 g 8 gis 9 a 10 ais 11 b/},
-  'flats' =>
-    {qw/0 c 1 des 2 d 3 ees 4 e 5 f 6 ges 7 g 8 aes 9 a 10 bes 11 b/},
+my $REL_DEF_REG = 4;    # for relative mode, via %REGISTERS
+# mixing flats and sharps not supported, either one or other right now
+my %P2N = (
+  flats  => {qw/0 c 1 des 2 d 3 ees 4 e 5 f 6 ges 7 g 8 aes 9 a 10 bes 11 b/},
+  sharps => {qw/0 c 1 cis 2 d 3 dis 4 e 5 f 6 fis 7 g 8 gis 9 a 10 ais 11 b/},
+);
+# Diabolus in Musica, indeed
+my %TTDIR = (
+  flats  => {qw/0 -1 1 1 2 -1 3 1 4 -1 5 1 6 1 7 -1 8 1 9 -1 10 1 11 -1/},
+  sharps => {qw/0 1 1 -1 2 1 3 -1 4 1 5 1 6 -1 7 1 8 -1 9 1 10 -1 11 -1/},
 );
 
 ########################################################################
@@ -100,16 +109,25 @@ sub p2ly {
       my $rel_reg = $REL_DEF_REG;
       if ( defined $prev_pitch ) {
         my $delta = $pitch - $prev_pitch;
-        if ( $delta % 6 == 0 ) {
-          if ( $self->{_chrome} =~ m/(?i)flat/ ) {
-            $delta += $delta > 0 ? 1 : -1;
-          } else {
-            $delta += $delta > 0 ? -1 : 1;
+        if ( abs($delta) >= $TRITONE ) {    # leaps need , or ' variously
+          if ( $delta % $DEG_IN_SCALE == $TRITONE ) {
+            $rel_reg += int( $delta / $DEG_IN_SCALE );
+
+            # Adjust for tricky changing tritone default direction
+            my $default_dir =
+              $TTDIR{ $self->{_chrome} }->{ $prev_pitch % $DEG_IN_SCALE };
+            if ( $delta > 0 and $default_dir < 0 ) {
+              $rel_reg++;
+            } elsif ( $delta < 0 and $default_dir > 0 ) {
+              $rel_reg--;
+            }
+
+          } else {    # not tritone, but leap
+            # TT adjust is to push <1 leaps out so become 1
+            $rel_reg +=
+              int( ( $delta + ( $delta > 0 ? $TRITONE : -$TRITONE ) ) /
+                $DEG_IN_SCALE );
           }
-        }
-        if ( abs($delta) > 6 ) {
-          $rel_reg += int( ( $delta - 6 ) / $DEG_IN_SCALE );
-          $rel_reg++ if $delta > 0;
         }
       }
       $register   = $REGISTERS{$rel_reg};

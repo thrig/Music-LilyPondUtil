@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 19;
+use Test::More tests => 23;
 BEGIN { use_ok('Music::LilyPondUtil') }
 
 my $lyu = Music::LilyPondUtil->new;
@@ -9,7 +9,7 @@ isa_ok( $lyu, 'Music::LilyPondUtil' );
 
 ########################################################################
 #
-# absolute mode (default)
+# p2ly - absolute mode (default)
 
 is( $lyu->p2ly(60), q{c'},  q{absolute 60 -> c'} );
 is( $lyu->p2ly(59), q{b},   q{absolute 59 -> b} );
@@ -30,13 +30,28 @@ is_deeply(
 
 ########################################################################
 #
-# relative, sharps
+# p2ly - relative, sharps
 
-$lyu->mode('relative');
-$lyu->chrome('sharps');
+is( $lyu->mode('relative'), 'relative', 'switch to relative' );
+is( $lyu->chrome('sharps'), 'sharps',   'switch to sharps' );
 
 is_deeply( [ $lyu->p2ly(qw{0 2 4 5 7 9 11 12}) ],
   [qw{c d e f g a b c}], q{relative octave run} );
+
+# tritones are tricky in relative mode
+is_deeply(
+  [ $lyu->p2ly(
+      qw{59 53 59 60 66 60 61 55 61 62 68 62 63 57 63 64 70 64 65 71 65 66 60 66 67 73 67 68 62 68 69 75 69 70 64 70}
+    )
+  ],
+  [ split ' ',
+    q{b f b c fis c cis g cis d gis d dis a dis e ais e f b f fis c fis g cis g gis d gis a dis a ais e ais}
+  ],
+  'relative sharps tritone no leap'
+);
+
+# TODO also must do contrary-to-default tritones, tritones at +/-
+# various octaves
 
 is_deeply(
   [ $lyu->p2ly(
@@ -77,11 +92,10 @@ is_deeply(
 
 ########################################################################
 #
-# relative, flats
+# p2ly - relative, flats
 
-$lyu->chrome('flats');
+is( $lyu->chrome('flats'), 'flats', 'switch to flats' );
 
-# If using flats, must leap up to the tritone (c up to g(flat))
 is_deeply(
   [ $lyu->p2ly(
       qw{60 62 60 65 60 66 60 67 60 69 60 78 60 79 60 62 67 62 68 62 69 62 80 62 81 62}
