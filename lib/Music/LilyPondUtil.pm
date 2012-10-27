@@ -16,7 +16,7 @@ our $VERSION = '0.03';
 my $DEG_IN_SCALE = 12;
 my $TRITONE      = 6;
 
-# this used by both absoluate and relative mode
+# this used by both absolute and relative mode
 my %REGISTERS = (
   0 => q(,,,,),
   1 => q(,,,),
@@ -236,7 +236,9 @@ Music::LilyPondUtil - utility methods for lilypond data
 
 Utility methods for interacting with lilypond, most notably for the
 conversion of random integers to lilypond note names. The Western 12-
-tone system is assumed.
+tone system is assumed. For more information on lilypond, see:
+
+http://www.lilypond.org/
 
 =head1 METHODS
 
@@ -253,10 +255,9 @@ Constructor. Optional parameters include:
 
 =item *
 
-B<keep_state> a boolean, turned on by default, that will maintain state
-on the previous pitch in the B<p2ly> call. State is not maintained
-across separate calls to B<p2ly>; to enable that behavior, enable the
-B<sticky_state> param.
+B<keep_state> a boolean, enabled by default, that will maintain state on
+the previous pitch in the B<p2ly> call. State is not maintained across
+separate calls to B<p2ly> (see also the B<sticky_state> param).
 
 Disabling this option will remove all register notation from both
 C<relative> and C<absolute> modes.
@@ -267,7 +268,10 @@ B<mode> to set C<absolute> or C<relative> mode.
 
 =item *
 
-B<chrome> to set the accidental style (C<sharps> or C<flats>).
+B<chrome> to set the accidental style (C<sharps> or C<flats>). Mixing
+flats and sharps is not supported. (Under no circumstances are double
+sharps or double flats emitted, though the module does know how to
+read those.)
 
 =item *
 
@@ -291,7 +295,9 @@ Get/set accidental style.
 
 Wipes out the previous pitch (the state variable used with
 B<sticky_state> enabled in C<relative> B<mode> to maintain state across
-multiple calls to B<p2ly>).
+multiple calls to B<p2ly>). Be sure to call this method after completing
+any standalone chord or phrase, as otherwise any subsequent B<p2ly>
+calls will use the previously cached pitch.
 
 =item B<keep_state> I<optional boolean>
 
@@ -312,6 +318,8 @@ Returns list of pitches.
 Converts a list of pitches (integers or objects that have a B<pitch>
 method that returns an integer) to a list of lilypond note names.
 Unknown data will be passed through as is. Returns said converted list.
+The behavior of this method depends heavily on various parameters that
+can be passed to B<new> or called as various methods.
 
 =item B<prev_pitch> I<optional pitch>
 
@@ -331,7 +339,8 @@ Get/set B<sticky_state> param.
 
 =item *
 
-http://www.lilypond.org/
+http://www.lilypond.org/ and most notably the Learning and
+Notation manuals.
 
 =item *
 
