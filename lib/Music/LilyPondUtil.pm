@@ -1,6 +1,6 @@
-# http://www.lilypond.org/ related utility code (mostly to
-# transition between Perl processing integers and the related
-# appropriate letter names for the black dots in lilypond).
+# http://www.lilypond.org/ related utility code (mostly to transition
+# between Perl processing integers and the related appropriate letter
+# names for the black dots in lilypond).
 
 package Music::LilyPondUtil;
 
@@ -15,6 +15,7 @@ our $VERSION = '0.02';
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
 my $TRITONE      = 6;
+
 # this used by both absoluate and relative mode
 my %REGISTERS = (
   0 => q(,,,,),
@@ -29,6 +30,10 @@ my %REGISTERS = (
   9 => q('''''),
 );
 my $REL_DEF_REG = 4;    # for relative mode, via %REGISTERS
+
+my %N2P = (
+  qw/bis 0 c 0 deses 0 bisis 1 cis 1 des 1 cisis 2 d 2 eeses 2 dis 3 ees 3 feses 3 disis 4 e 4 fes 4 eis 5 f 5 geses 5 eisis 6 fis 6 ges 6 fisis 7 g 7 aeses 7 gis 8 aes 8 gisis 9 a 9 beses 9 ais 10 bes 10 ceses 10 aisis 11 b 11 ces 11/
+);
 # mixing flats and sharps not supported, either one or other right now
 my %P2N = (
   flats  => {qw/0 c 1 des 2 d 3 ees 4 e 5 f 6 ges 7 g 8 aes 9 a 10 bes 11 b/},
@@ -53,7 +58,7 @@ sub new {
     if $self->{_mode} ne 'absolute' and $self->{_mode} ne 'relative';
 
   $self->{_chrome} = $param{chrome} || 'sharps';
-  croak("unknown 'chrome' conversion style")
+  croak("chrome must be 'sharps' or 'flats'")
     unless exists $P2N{ $self->{_chrome} };
 
   $self->{_p2n_hook} = $param{p2n_hook}
@@ -68,7 +73,7 @@ sub new {
 sub chrome {
   my ( $self, $chrome ) = @_;
   if ( defined $chrome ) {
-    croak("unknown CHROME conversion style") unless exists $P2N{$chrome};
+    croak("chrome must be 'sharps' or 'flats'") unless exists $P2N{$chrome};
     $self->{_chrome} = $chrome;
   }
   return $self->{_chrome};
@@ -84,6 +89,20 @@ sub mode {
   return $self->{_mode};
 }
 
+# Only recognizes plain note names, no registers or anything else (for now)
+sub notes2pitches {
+  my $self = shift;
+  my @pitches;
+
+  for my $n (@_) {
+    croak "unknown note '$n'" unless exists $N2P{$n};
+    push @pitches, $N2P{$n};
+  }
+
+  return @pitches > 1 ? @pitches : $pitches[0];
+}
+
+# Converts pitches to lilypond names
 sub p2ly {
   my $self = shift;
 
@@ -106,7 +125,8 @@ sub p2ly {
     my $register;
     if ( $self->{_mode} ne 'relative' ) {
       $register = $REGISTERS{ int $pitch / $DEG_IN_SCALE };
-    } else {
+
+    } else {    # relatively more complicated
       my $rel_reg = $REL_DEF_REG;
       if ( defined $prev_pitch ) {
         my $delta = $pitch - $prev_pitch;
@@ -152,13 +172,18 @@ Music::LilyPondUtil - utility methods for lilypond data
 =head1 SYNOPSIS
 
   use Music::LilyPondUtil;
-  my $lyu Music::LilyPondUtil->new;
+  my $lyu = Music::LilyPondUtil->new;
 
-  $lyu->p2ly(60)  # c'
+  my $note = $lyu->p2ly(60)  # c'
+
+  $lyu->mode('relative');
+  my @bach = $lyu->p2ly(qw/60 62 64 65 62 64 60 67 72 71 72 74/)
+      # c d e f d e c g' c b c d
 
 =head1 DESCRIPTION
 
-Utility methods for interacting with lilypond.
+Utility methods for interacting with lilypond, most notably for the
+conversion of random integers to lilypond note names.
 
 =head1 METHODS
 
@@ -182,17 +207,34 @@ Get/set accidental style.
 
 Get/set the mode of operation.
 
+=item B<notes2pitches> I<list of simple note names>
+
+Converts note names to pitches. Only recognizes limited set of lilypond
+note names, and does not know about registers or other note metadata.
+Returns list of pitches.
+
 =item B<p2ly> I<list of pitches or whatnot>
 
 Converts a list of pitches (integers or objects that have a B<pitch>
 method that returns an integer) to a list of lilypond note names.
-Unknown data will be passed through as is.
+Unknown data will be passed through as is. Returns said converted list.
 
 =back
 
 =head1 SEE ALSO
 
+=over 4
+
+=item *
+
 http://www.lilypond.org/
+
+=item *
+
+L<Music::AtonalUtil> whose C<atonal-util> command uses this module to
+convert pitch numbers into lilypond note names for more readable output.
+
+=back
 
 =head1 AUTHOR
 

@@ -1,11 +1,15 @@
 use strict;
 use warnings;
 
-use Test::More tests => 30;
+use Test::More tests => 32;
 BEGIN { use_ok('Music::LilyPondUtil') }
 
 my $lyu = Music::LilyPondUtil->new;
 isa_ok( $lyu, 'Music::LilyPondUtil' );
+
+is( $lyu->notes2pitches("c"), 0, 'convert c to pitch' );
+is_deeply( [ $lyu->notes2pitches(qw/c d e f/) ],
+  [qw/0 2 4 5/], 'convert bunch of notes to pitches' );
 
 ########################################################################
 #
