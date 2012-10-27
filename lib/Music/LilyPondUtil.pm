@@ -58,7 +58,8 @@ sub new {
 
   $self->{_p2n_hook} = $param{p2n_hook}
     || sub { $P2N{ $_[1] }->{ $_[0] % $DEG_IN_SCALE } };
-  croak("'p2n_hook' must be code ref") unless ref $self->{_p2n_hook} eq 'CODE';
+  croak("'p2n_hook' must be code ref")
+    unless ref $self->{_p2n_hook} eq 'CODE';
 
   bless $self, $class;
   return $self;
@@ -170,7 +171,7 @@ encountered.
 
 Constructor. Optional parameters are B<mode> to set C<absolute> or
 C<relative> mode, B<chrome> to set the accidental style (C<sharps> or
-C<flats), and B<p2n_hook> to set a custom code reference for the pitch
+C<flats>), and B<p2n_hook> to set a custom code reference for the pitch
 to note conversion (untested, see source for details).
 
 =item B<chrome> I<optional sharps or flats>
