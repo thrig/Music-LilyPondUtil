@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 32;
+use Test::More tests => 39;
 BEGIN { use_ok('Music::LilyPondUtil') }
 
 my $lyu = Music::LilyPondUtil->new;
@@ -170,9 +170,41 @@ is_deeply(
 # Various new() params
 
 $lyu = Music::LilyPondUtil->new( mode => 'relative' );
-isa_ok( $lyu, 'Music::LilyPondUtil' );
 is( $lyu->mode, 'relative' );
 
 $lyu = Music::LilyPondUtil->new( chrome => 'flats' );
-isa_ok( $lyu, 'Music::LilyPondUtil' );
 is( $lyu->chrome, 'flats' );
+
+$lyu = Music::LilyPondUtil->new( keep_state => 0 );
+ok( !$lyu->keep_state, 'keep_state is disabled' );
+
+is_deeply( [ $lyu->p2ly(qw/0 12 24 36/) ],
+  [qw/c c c c/], q{state disabled should nix registers relative} );
+
+$lyu->mode('absolute');
+is_deeply( [ $lyu->p2ly(qw/0 12 24 36/) ],
+  [qw/c c c c/], q{state disabled should nix registers absolute} );
+
+$lyu->keep_state(1);
+ok( $lyu->keep_state, 'keep_state is enabled' );
+
+$lyu = Music::LilyPondUtil->new( sticky_state => 1 );
+ok( $lyu->sticky_state, 'sticky_state is enabled' );
+
+$lyu->mode('relative');
+my @notes = $lyu->p2ly(0);
+for my $i ( 0 .. 2 ) {
+  push @notes, $lyu->p2ly( 12 + $i * 12 );
+}
+is_deeply(
+  \@notes,
+  [ split ' ', "c c' c' c'" ],
+  'sticky state across p2ly calls'
+);
+
+is( $lyu->prev_pitch, 36, 'previous sticky pitch' );
+$lyu->clear_prev_pitch;
+ok( !defined $lyu->prev_pitch, 'previous pitch cleared' );
+
+$lyu->sticky_state(0);
+ok( !$lyu->sticky_state, 'sticky_state is disabled' );

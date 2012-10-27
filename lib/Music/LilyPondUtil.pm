@@ -53,18 +53,22 @@ sub new {
   my ( $class, %param ) = @_;
   my $self = {};
 
-  $self->{_mode} = $param{mode} || 'absolute';
-  croak("'mode' must be 'absolute' or 'relative'")
-    if $self->{_mode} ne 'absolute' and $self->{_mode} ne 'relative';
-
   $self->{_chrome} = $param{chrome} || 'sharps';
   croak("chrome must be 'sharps' or 'flats'")
     unless exists $P2N{ $self->{_chrome} };
+
+  $self->{_keep_state} = $param{keep_state} // 1;
+
+  $self->{_mode} = $param{mode} || 'absolute';
+  croak("'mode' must be 'absolute' or 'relative'")
+    if $self->{_mode} ne 'absolute' and $self->{_mode} ne 'relative';
 
   $self->{_p2n_hook} = $param{p2n_hook}
     || sub { $P2N{ $_[1] }->{ $_[0] % $DEG_IN_SCALE } };
   croak("'p2n_hook' must be code ref")
     unless ref $self->{_p2n_hook} eq 'CODE';
+
+  $self->{_sticky_state} = $param{sticky_state} // 0;
 
   bless $self, $class;
   return $self;
@@ -77,6 +81,12 @@ sub chrome {
     $self->{_chrome} = $chrome;
   }
   return $self->{_chrome};
+}
+
+sub keep_state {
+  my ( $self, $state ) = @_;
+  $self->{_keep_state} = $state if defined $state;
+  return $self->{_keep_state};
 }
 
 sub mode {
@@ -102,64 +112,100 @@ sub notes2pitches {
   return @pitches > 1 ? @pitches : $pitches[0];
 }
 
-# Converts pitches to lilypond names
-sub p2ly {
-  my $self = shift;
+sub sticky_state {
+  my ( $self, $state ) = @_;
+  $self->{_sticky_state} = $state if defined $state;
+  return $self->{_sticky_state};
+}
 
-  my ( @notes, $prev_pitch );
-  for my $obj (@_) {
-    my $pitch;
-    if ( blessed $obj and $obj->can("pitch") ) {
-      $pitch = $obj->pitch;
-    } elsif ( looks_like_number $obj) {
-      $pitch = $obj;
-    } else {
-      # pass through on unknowns (could be rests or who knows what)
-      push @notes, $obj;
-      next;
-    }
+{
+  my $prev_pitch;
 
-    my $note = $self->{_p2n_hook}( $pitch, $self->{_chrome} );
-    croak "could not lookup note for pitch '$pitch'" unless defined $note;
-
-    my $register;
-    if ( $self->{_mode} ne 'relative' ) {
-      $register = $REGISTERS{ int $pitch / $DEG_IN_SCALE };
-
-    } else {    # relatively more complicated
-      my $rel_reg = $REL_DEF_REG;
-      if ( defined $prev_pitch ) {
-        my $delta = $pitch - $prev_pitch;
-        if ( abs($delta) >= $TRITONE ) {    # leaps need , or ' variously
-          if ( $delta % $DEG_IN_SCALE == $TRITONE ) {
-            $rel_reg += int( $delta / $DEG_IN_SCALE );
-
-            # Adjust for tricky changing tritone default direction
-            my $default_dir =
-              $TTDIR{ $self->{_chrome} }->{ $prev_pitch % $DEG_IN_SCALE };
-            if ( $delta > 0 and $default_dir < 0 ) {
-              $rel_reg++;
-            } elsif ( $delta < 0 and $default_dir > 0 ) {
-              $rel_reg--;
-            }
-
-          } else {    # not tritone, but leap
-                      # TT adjust is to push <1 leaps out so become 1
-            $rel_reg +=
-              int( ( $delta + ( $delta > 0 ? $TRITONE : -$TRITONE ) ) /
-                $DEG_IN_SCALE );
-          }
-        }
-      }
-      $register   = $REGISTERS{$rel_reg};
-      $prev_pitch = $pitch;
-    }
-    croak "register out of range for pitch '$pitch'" unless defined $register;
-
-    push @notes, $note . $register;
+  sub clear_prev_pitch {
+    my ($self) = @_;
+    undef $prev_pitch;
   }
 
-  return @_ > 1 ? @notes : $notes[0];
+  sub prev_pitch {
+    my ( $self, $pitch ) = @_;
+    if ( defined $pitch ) {
+      if ( blessed $pitch and $pitch->can("pitch") ) {
+        $prev_pitch = $pitch->pitch;
+      } elsif ( looks_like_number $pitch ) {
+        $prev_pitch = $pitch;
+      } else {
+        croak("unknown pitch '$pitch'");
+      }
+    }
+    return $prev_pitch;
+  }
+
+  # Converts pitches to lilypond names
+  sub p2ly {
+    my $self = shift;
+
+    my @notes;
+    for my $obj (@_) {
+      my $pitch;
+      if ( blessed $obj and $obj->can("pitch") ) {
+        $pitch = $obj->pitch;
+      } elsif ( looks_like_number $obj) {
+        $pitch = $obj;
+      } else {
+        # pass through on unknowns (could be rests or who knows what)
+        push @notes, $obj;
+        next;
+      }
+
+      my $note = $self->{_p2n_hook}( $pitch, $self->{_chrome} );
+      croak "could not lookup note for pitch '$pitch'" unless defined $note;
+
+      my $register;
+      if ( $self->{_mode} ne 'relative' ) {
+        $register = $REGISTERS{ int $pitch / $DEG_IN_SCALE };
+
+      } else {    # relatively more complicated
+        my $rel_reg = $REL_DEF_REG;
+        if ( defined $prev_pitch ) {
+          my $delta = int( $pitch - $prev_pitch );
+          if ( abs($delta) >= $TRITONE ) {    # leaps need , or ' variously
+            if ( $delta % $DEG_IN_SCALE == $TRITONE ) {
+              $rel_reg += int( $delta / $DEG_IN_SCALE );
+
+              # Adjust for tricky changing tritone default direction
+              my $default_dir =
+                $TTDIR{ $self->{_chrome} }->{ $prev_pitch % $DEG_IN_SCALE };
+              if ( $delta > 0 and $default_dir < 0 ) {
+                $rel_reg++;
+              } elsif ( $delta < 0 and $default_dir > 0 ) {
+                $rel_reg--;
+              }
+
+            } else {    # not tritone, but leap
+                        # TT adjust is to push <1 leaps out so become 1
+              $rel_reg +=
+                int( ( $delta + ( $delta > 0 ? $TRITONE : -$TRITONE ) ) /
+                  $DEG_IN_SCALE );
+            }
+          }
+        }
+        $register = $REGISTERS{$rel_reg};
+        $prev_pitch = $pitch if $self->{_keep_state};
+      }
+
+      # Do not care about register (even in absolute mode) if keeping state
+      if ( $self->{_keep_state} ) {
+        croak "register out of range for pitch '$pitch'"
+          unless defined $register;
+      } else {
+        $register = '';
+      }
+      push @notes, $note . $register;
+    }
+
+    undef $prev_pitch unless $self->{_sticky_state};
+    return @_ > 1 ? @notes : $notes[0];
+  }
 }
 
 1;
@@ -174,16 +220,23 @@ Music::LilyPondUtil - utility methods for lilypond data
   use Music::LilyPondUtil;
   my $lyu = Music::LilyPondUtil->new;
 
-  my $note = $lyu->p2ly(60)  # c'
+  my $note = $lyu->p2ly(60)            # c'
 
   $lyu->mode('relative');
   my @bach = $lyu->p2ly(qw/60 62 64 65 62 64 60 67 72 71 72 74/)
       # c d e f d e c g' c b c d
 
+  $lyu->keep_state(0);
+  $lyu->p2ly(qw/0 1023 79 77 -384/);   # c dis g f c
+
+  $lyu->chrome('flats');
+  $lyu->p2ly(qw/2 9 5 2 1 2/);         # d a f d des d
+
 =head1 DESCRIPTION
 
 Utility methods for interacting with lilypond, most notably for the
-conversion of random integers to lilypond note names.
+conversion of random integers to lilypond note names. The Western 12-
+tone system is assumed.
 
 =head1 METHODS
 
@@ -194,14 +247,55 @@ encountered.
 
 =item B<new> I<optional params>
 
-Constructor. Optional parameters are B<mode> to set C<absolute> or
-C<relative> mode, B<chrome> to set the accidental style (C<sharps> or
-C<flats>), and B<p2n_hook> to set a custom code reference for the pitch
-to note conversion (untested, see source for details).
+Constructor. Optional parameters include:
+
+=over 4
+
+=item *
+
+B<keep_state> a boolean, turned on by default, that will maintain state
+on the previous pitch in the B<p2ly> call. State is not maintained
+across separate calls to B<p2ly>; to enable that behavior, enable the
+B<sticky_state> param.
+
+Disabling this option will remove all register notation from both
+C<relative> and C<absolute> modes.
+
+=item *
+
+B<mode> to set C<absolute> or C<relative> mode.
+
+=item *
+
+B<chrome> to set the accidental style (C<sharps> or C<flats>).
+
+=item *
+
+B<p2n_hook> to set a custom code reference for the pitch to note
+conversion (see source for details).
+
+=item *
+
+B<sticky_state> a boolean, disabled by default, that if enabled,
+will maintain the previous pitch state across separate calls to
+B<p2ly>, assuming B<keep_state> is also enabled, and again only in
+C<relative> B<mode>.
+
+=back
 
 =item B<chrome> I<optional sharps or flats>
 
 Get/set accidental style.
+
+=item B<clear_prev_pitch>
+
+Wipes out the previous pitch (the state variable used with
+B<sticky_state> enabled in C<relative> B<mode> to maintain state across
+multiple calls to B<p2ly>).
+
+=item B<keep_state> I<optional boolean>
+
+Get/set B<keep_state> param.
 
 =item B<mode> I<optional relative or absolute>
 
@@ -218,6 +312,16 @@ Returns list of pitches.
 Converts a list of pitches (integers or objects that have a B<pitch>
 method that returns an integer) to a list of lilypond note names.
 Unknown data will be passed through as is. Returns said converted list.
+
+=item B<prev_pitch> I<optional pitch>
+
+Get/set previous pitch (the state variable used with B<sticky_state>
+enabled in C<relative> B<mode> to maintain state across multiple calls
+to B<p2ly>).
+
+=item B<sticky_state> I<optional boolean>
+
+Get/set B<sticky_state> param.
 
 =back
 
