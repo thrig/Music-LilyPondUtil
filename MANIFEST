@@ -1,5 +1,6 @@
-Makefile.PL
 MANIFEST
+Makefile.PL
 README
-t/Music-LilyPondUtil.t
 lib/Music/LilyPondUtil.pm
+t/Music-LilyPondUtil.t
+t/pod.t
