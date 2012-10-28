@@ -344,8 +344,7 @@ Notation manuals.
 
 =item *
 
-L<Music::AtonalUtil> whose C<atonal-util> command uses this module to
-convert pitch numbers into lilypond note names for more readable output.
+L<App::MusicTools> whose command line tools make use of this module.
 
 =back
 
