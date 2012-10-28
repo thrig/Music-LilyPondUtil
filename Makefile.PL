@@ -7,7 +7,6 @@ use ExtUtils::MakeMaker;
 my %params = (
   NAME         => 'Music::LilyPondUtil',
   VERSION_FROM => 'lib/Music/LilyPondUtil.pm',
-  LICENSE      => 'perl',
   PREREQ_PM    => {
     Carp           => 0,
     'Scalar::Util' => 0,
