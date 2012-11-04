@@ -1,7 +1,8 @@
 use strict;
 use warnings;
 
-use Test::More tests => 39;
+use Test::More tests => 41;
+use Test::Exception;
 BEGIN { use_ok('Music::LilyPondUtil') }
 
 my $lyu = Music::LilyPondUtil->new;
@@ -10,6 +11,9 @@ isa_ok( $lyu, 'Music::LilyPondUtil' );
 is( $lyu->notes2pitches("c"), 0, 'convert c to pitch' );
 is_deeply( [ $lyu->notes2pitches(qw/c d e f/) ],
   [qw/0 2 4 5/], 'convert bunch of notes to pitches' );
+
+is( $lyu->notes2pitches(11), 11, 'pass through raw pitch numbers' );
+dies_ok( sub { $lyu->notes2pitches(12) }, 'but not non-0-to-11 numbers' );
 
 ########################################################################
 #
