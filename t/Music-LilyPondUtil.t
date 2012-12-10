@@ -1,23 +1,92 @@
 use strict;
 use warnings;
 
-use Test::More tests => 41;
+use Test::More tests => 56;
 use Test::Exception;
 BEGIN { use_ok('Music::LilyPondUtil') }
 
 my $lyu = Music::LilyPondUtil->new;
 isa_ok( $lyu, 'Music::LilyPondUtil' );
 
-is( $lyu->notes2pitches("c"), 0, 'convert c to pitch' );
-is_deeply( [ $lyu->notes2pitches(qw/c d e f/) ],
-  [qw/0 2 4 5/], 'convert bunch of notes to pitches' );
+########################################################################
+#
+# notes2pitches - absolute mode (default)
 
-is( $lyu->notes2pitches(11), 11, 'pass through raw pitch numbers' );
-dies_ok( sub { $lyu->notes2pitches(12) }, 'but not non-0-to-11 numbers' );
+is( $lyu->notes2pitches('c'), 48, 'convert c to pitch' );
+is_deeply(
+  [ $lyu->notes2pitches(qw/c d e r f/) ],
+  [ qw/48 50 52/, undef, 53 ],
+  'convert notes to pitches'
+);
+
+is( $lyu->notes2pitches(11), 11, 'pass through raw pitch number' );
+# or whatever
+is_deeply(
+  [ $lyu->notes2pitches( -42, 9999 ) ],
+  [ -42, 9999 ],
+  'pass through raw pitch numbers'
+);
+
+# must worry about chromatics that jump the register
+is( $lyu->notes2pitches('ces'),     47, 'convert ces to pitch' );
+is( $lyu->notes2pitches(q{bisis,}), 49, 'convert bisis, to pitch' );
+
+is_deeply(
+  [ $lyu->notes2pitches( split ' ', q{d,, fis' aes g, bis''' c'' eisis'} ) ],
+  [qw/26 66 56 43 96 72 66/],
+  'leaps and bounds'
+);
+
+# however, "gesture" or "fish" type words will pass muster, as the
+# current code does not account for duration or other lilypond elements,
+# or otherwise check the tail of the input.
+dies_ok( sub { $lyu->notes2pitches('quack') },
+  "if it quacks like a note, it's a duck, not a note" );
+
+########################################################################
+#
+# notes2pitches - relative mode
+
+is( $lyu->mode('relative'), 'relative', 'switch to relative' );
+
+# some simple no-leap foo
+is_deeply(
+  [ $lyu->notes2pitches(qw/c c f c b c g c fis/) ],
+  [ 48, 48, 53, 48, 47, 48, 43, 48, 54 ],
+  'convert notes to pitches'
+);
+
+# all the no-leap sharp tritones
+is_deeply(
+  [ $lyu->notes2pitches(
+      qw/b f b c fis c cis g cis d gis d dis a dis e ais e f b f fis c fis g cis g gis d gis a dis a ais e ais/
+    )
+  ],
+  [ qw/59 53 59 60 66 60 61 55 61 62 68 62 63 57 63 64 70 64 65 71 65 66 60 66 67 73 67 68 62 68 69 75 69 70 64 70/
+  ],
+  'relative sharps tritone no leap'
+);
+
+# tricky - returns pitch of the diatonic, as relative calculations use those
+is( $lyu->prev_note(q{aes'}), 69, 'set previous note' );
+is( $lyu->prev_note(q{a'}), 69, 'set previous note' );
+
+is_deeply(
+  [ $lyu->notes2pitches(
+      split ' ',
+      q{c g,, c, geses' c'' ceses c,, ees, bis' b'' bis geses,, bis, ees' bis'' dis gis,, aes, gis' e'' gis f,, gis, bis' ces'' aeses ces,, ges, ces' feses'' ces fis,, e, cis' e'' b e,, fisis, e' g'' ges d,, ges, bes' ges'' e ges,, geses, cis' fisis'' cis des,, cis, dis' cis'' aeses fisis,, eeses, fisis' gisis'' fisis ges,, fisis, des'}
+    )
+  ],
+  [ qw/72 43 36 41 72 70 48 39 48 71 72 41 36 51 72 75 56 44 56 76 80 53 44 60 83 79 59 42 59 87 83 66 52 61 88 83 64 55 64 91 90 62 54 70 90 88 66 53 73 103 97 73 61 75 97 91 67 50 67 93 91 66 55 61/
+  ],
+  'random complicated foo'
+);
 
 ########################################################################
 #
 # p2ly - absolute mode (default)
+
+$lyu = Music::LilyPondUtil->new;
 
 is( $lyu->p2ly(60), q{c'},  q{absolute 60 -> c'} );
 is( $lyu->p2ly(59), q{b},   q{absolute 59 -> b} );
@@ -40,8 +109,8 @@ is_deeply(
 #
 # p2ly - relative, sharps
 
-is( $lyu->mode('relative'), 'relative', 'switch to relative' );
-is( $lyu->chrome('sharps'), 'sharps',   'switch to sharps' );
+$lyu->mode('relative');
+is( $lyu->chrome('sharps'), 'sharps', 'switch to sharps' );
 
 is_deeply( [ $lyu->p2ly(qw{0 2 4 5 7 9 11 12}) ],
   [qw{c d e f g a b c}], q{relative octave run} );
@@ -121,7 +190,7 @@ is_deeply(
   [ split ' ',
     q{b f b c ges c des g des d aes d ees a ees e bes e f b f ges c ges g des g aes d aes a ees a bes e bes}
   ],
-  'relative sharps tritone no leap'
+  'relative flats tritone no leap'
 );
 
 is_deeply(
@@ -171,7 +240,30 @@ is_deeply(
 
 ########################################################################
 #
-# Various new() params
+# notes2pitches params
+
+$lyu = Music::LilyPondUtil->new( ignore_register => 1 );
+ok( $lyu->ignore_register, 'ignore_register is enabled' );
+is_deeply( [ $lyu->notes2pitches(qw/c d e f/) ],
+  [qw/0 2 4 5/], 'convert notes to tone-row pitches' );
+$lyu->ignore_register(0);
+is_deeply( [ $lyu->notes2pitches(qw/c d e f/) ],
+  [qw/48 50 52 53/], 'convert notes to pitches' );
+
+$lyu = Music::LilyPondUtil->new( strip_rests => 1 );
+ok( $lyu->strip_rests, 'strip_rests is enabled' );
+is_deeply( [ $lyu->notes2pitches(qw/c d e r f/) ],
+  [qw/48 50 52 53/], 'convert notes to pitches, stripping rests' );
+$lyu->strip_rests(0);
+is_deeply(
+  [ $lyu->notes2pitches(qw/c r c/) ],
+  [ 48, undef, 48 ],
+  'convert notes to pitches'
+);
+
+########################################################################
+#
+# p2ly params
 
 $lyu = Music::LilyPondUtil->new( mode => 'relative' );
 is( $lyu->mode, 'relative' );
