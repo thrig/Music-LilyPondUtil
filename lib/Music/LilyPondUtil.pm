@@ -577,7 +577,7 @@ can be passed to B<new> or called as various methods.
 
 =item B<prev_note> I<optional note>
 
-For use with B<notes2pitches. Get/set previous note (the state variable
+For use with B<notes2pitches>. Get/set previous note (the state variable
 used with B<sticky_state> enabled in C<relative> B<mode> to maintain
 state across multiple calls to B<p2ly>). Optionally accepts only a note
 (for example, C<ces,> or C<f''>), and always returns the current
