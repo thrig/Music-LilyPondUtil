@@ -10,7 +10,7 @@ use warnings;
 use Carp qw(croak);
 use Scalar::Util qw(blessed looks_like_number);
 
-our $VERSION = '0.10';
+our $VERSION = '0.20';
 
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
@@ -104,6 +104,28 @@ sub chrome {
     $self->{_chrome} = $chrome;
   }
   return $self->{_chrome};
+}
+
+# diatonic (piano white key) pitch number for a given input note (like
+# prev_note() below except without side-effects).
+sub diatonic_pitch {
+  my ( $self, $note ) = @_;
+
+  if ( $note =~ m/^$LY_NOTE_RE/ ) {
+    # TODO duplicates (portions of) same code, below
+    my $real_note     = $1;
+    my $diatonic_note = $2;
+    my $reg_symbol    = $3 // '';
+
+    croak "unknown lilypond note $note" unless exists $N2P{$real_note};
+    croak "register out of range for note $note"
+      unless exists $REVREGS{$reg_symbol};
+
+    return $N2P{$diatonic_note} + $REVREGS{$reg_symbol} * $DEG_IN_SCALE;
+
+  } else {
+    croak("unknown note $note");
+  }
 }
 
 sub ignore_register {
@@ -537,6 +559,12 @@ used with B<sticky_state> enabled in C<relative> B<mode> to maintain
 state across multiple calls to B<p2ly>). Be sure to call this method
 after completing any standalone chord or phrase, as otherwise any
 subsequent B<p2ly> calls will use the previously cached pitch.
+
+=item B<diatonic_pitch> I<note>
+
+Returns the diatonic (here defined as the white notes on the piano)
+pitch number for a given lilypond absolute notation note, for example
+C<ceses'>, C<ces'>, C<c'>, C<cis'>, and C<cisis'> all return 60.
 
 =item B<ignore_register> I<optional boolean>
 

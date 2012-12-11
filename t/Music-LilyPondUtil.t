@@ -1,12 +1,15 @@
 use strict;
 use warnings;
 
-use Test::More tests => 56;
+use Test::More tests => 58;
 use Test::Exception;
 BEGIN { use_ok('Music::LilyPondUtil') }
 
 my $lyu = Music::LilyPondUtil->new;
 isa_ok( $lyu, 'Music::LilyPondUtil' );
+
+is($lyu->diatonic_pitch(q{c'}), 60, 'diatonic to diatonic');
+is($lyu->diatonic_pitch(q{ceses'}), 60, 'not diatonic to diatonic');
 
 ########################################################################
 #
