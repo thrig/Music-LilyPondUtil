@@ -10,7 +10,7 @@ use warnings;
 use Carp qw(croak);
 use Scalar::Util qw(blessed looks_like_number);
 
-our $VERSION = '0.20';
+our $VERSION = '0.21';
 
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
@@ -111,6 +111,7 @@ sub chrome {
 sub diatonic_pitch {
   my ( $self, $note ) = @_;
 
+  my $pitch;
   if ( $note =~ m/^$LY_NOTE_RE/ ) {
     # TODO duplicates (portions of) same code, below
     my $real_note     = $1;
@@ -121,11 +122,14 @@ sub diatonic_pitch {
     croak "register out of range for note $note"
       unless exists $REVREGS{$reg_symbol};
 
-    return $N2P{$diatonic_note} + $REVREGS{$reg_symbol} * $DEG_IN_SCALE;
+    $pitch = $N2P{$diatonic_note} + $REVREGS{$reg_symbol} * $DEG_IN_SCALE;
+    $pitch %= $DEG_IN_SCALE if $self->{_ignore_register};
 
   } else {
     croak("unknown note $note");
   }
+
+  return $pitch;
 }
 
 sub ignore_register {
@@ -440,9 +444,11 @@ Music::LilyPondUtil - utility methods for lilypond data
   my $lyu   = Music::LilyPondUtil->new;
 
   my $pitch = $lyu->notes2pitches("c'") # 60
+  $lyu->diatonic_pitch("ces'")          # 60
 
   $lyu->ignore_register(1);
   $lyu->notes2pitches("c'")             # 0
+  $lyu->diatonic_pitch("ces'")          # 0
 
 
   my $note  = $lyu->p2ly(60)            # c'
@@ -494,10 +500,11 @@ read those.)
 
 =item *
 
-B<ignore_register> a boolean that if set causes B<notes2pitches> to only
-return values from 0..11. The default is to include the register
-information in the resulting pitch. Set this option if feeding data to
-atonal routines, for example those in L<Music::AtonalUtil>.
+B<ignore_register> a boolean that if set causes the B<diatonic_pitch>
+and B<notes2pitches> methods to only return values from 0..11. The
+default is to include the register information in the resulting pitch.
+Set this option if feeding data to atonal routines, for example those in
+L<Music::AtonalUtil>.
 
 =item *
 
@@ -564,7 +571,8 @@ subsequent B<p2ly> calls will use the previously cached pitch.
 
 Returns the diatonic (here defined as the white notes on the piano)
 pitch number for a given lilypond absolute notation note, for example
-C<ceses'>, C<ces'>, C<c'>, C<cis'>, and C<cisis'> all return 60.
+C<ceses'>, C<ces'>, C<c'>, C<cis'>, and C<cisis'> all return 60. This
+method is influenced by the B<ignore_register> option.
 
 =item B<ignore_register> I<optional boolean>
 
@@ -583,11 +591,11 @@ Get/set the mode of operation.
 Converts note names to pitches. Raw pitch numbers (integers) are passed
 through as is. Lilypond non-note C<r> or C<s> in any case are converted
 to undefined values (likewise for notes adorned with C<\rest>).
-Otherwise, lilypond note names (C<c>, C<cis>, etc.) and registers (C<'>,
-C<''>, etc.) are converted to a pitch number. The B<ignore_register> and
-B<strip_rests> options can influence the output for common needs. Use
-the B<prev_note> method to set what a C<\relative d'' { ...> statement in
-lilypond would do:
+Otherwise, lilypond note names (C<c>, C<cis>, etc.) and registers
+(C<'>, C<''>, etc.) are converted to a pitch number. The
+B<ignore_register> and B<strip_rests> options can influence the output.
+Use the B<prev_note> method to set what a C<\relative d'' { ...>
+statement in lilypond would do:
 
   $lyu->prev_note(q{d''});
   $lyu->notes2pitches(qw/d g fis g a g fis e/);
