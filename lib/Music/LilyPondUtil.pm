@@ -10,7 +10,7 @@ use warnings;
 use Carp qw(croak);
 use Scalar::Util qw(blessed looks_like_number);
 
-our $VERSION = '0.21';
+our $VERSION = '0.22';
 
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
@@ -111,6 +111,8 @@ sub chrome {
 sub diatonic_pitch {
   my ( $self, $note ) = @_;
 
+  croak "note not defined" unless defined $note;
+
   my $pitch;
   if ( $note =~ m/^$LY_NOTE_RE/ ) {
     # TODO duplicates (portions of) same code, below
@@ -200,7 +202,11 @@ sub mode {
     for my $n (@_) {
       # pass through what hopefully are raw pitch numbers, otherwise parse
       # note from subset of the lilypond note format
-      if ( $n =~ m/^(-?\d+)$/ ) {
+      if ( !defined $n ) {
+        # might instead blow up? or have option to blow up...
+        push @pitches, undef unless $self->{_strip_rests};
+
+      } elsif ( $n =~ m/^(-?\d+)$/ ) {
         push @pitches, $n;
 
       } elsif ( $n =~ m/^(?i)[rs]/ or $n =~ m/\\rest/ ) {
@@ -358,7 +364,9 @@ sub mode {
     my @notes;
     for my $obj (@_) {
       my $pitch;
-      if ( blessed $obj and $obj->can("pitch") ) {
+      if ( !defined $obj ) {
+        croak "cannot convert undefined value to lilypond element\n";
+      } elsif ( blessed $obj and $obj->can("pitch") ) {
         $pitch = $obj->pitch;
       } elsif ( looks_like_number $obj) {
         $pitch = $obj;
