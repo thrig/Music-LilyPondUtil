@@ -63,6 +63,17 @@ sub new {
   $self->{_min_pitch} = $param{min_pitch} // 0;
   $self->{_max_pitch} = $param{max_pitch} // 108;
 
+  if ( exists $param{min_pitch_hook} ) {
+    croak "min_pitch_hook must be code ref"
+      unless ref $param{min_pitch_hook} eq 'CODE';
+    $self->{_min_pitch_hook} = $param{min_pitch_hook};
+  }
+  if ( exists $param{max_pitch_hook} ) {
+    croak "max_pitch_hook must be code ref"
+      unless ref $param{max_pitch_hook} eq 'CODE';
+    $self->{_max_pitch_hook} = $param{max_pitch_hook};
+  }
+
   $self->{_mode} = $param{mode} || 'absolute';
   croak("'mode' must be 'absolute' or 'relative'")
     if $self->{_mode} ne 'absolute' and $self->{_mode} ne 'relative';
@@ -107,10 +118,6 @@ sub diatonic_pitch {
     $pitch =
       $N2P{$diatonic_note} + $self->reg_sym2num($reg_symbol) * $DEG_IN_SCALE;
     $pitch %= $DEG_IN_SCALE if $self->{_ignore_register};
-
-    if ( $pitch < $self->{_min_pitch} or $pitch > $self->{_max_pitch} ) {
-      croak "pitch $pitch is out of range\n";
-    }
 
   } else {
     croak("unknown note $note");
@@ -258,11 +265,6 @@ sub mode {
               $reg_number += $reg_offset * $DEG_IN_SCALE;
             }
 
-            # confine things to MIDI pitch numbers
-            if ( $reg_number < 0 or $reg_number > 96 ) {
-              croak "register out of range for $n\n";
-            }
-
             ( $diatonic_pitch, $real_pitch ) =
               map { $reg_number + $N2P{$_} } $diatonic_note, $real_note;
 
@@ -356,8 +358,16 @@ sub mode {
         next;
       }
 
-      if ( $pitch < $self->{_min_pitch} or $pitch > $self->{_max_pitch} ) {
-        croak "pitch $pitch is out of range\n";
+      # Response handling on range check:
+      # * exception - out of bounds, default die() handler tripped
+      # * defined return value - got something from a hook function, use that
+      # * undefined - pitch is within bounds, continue with code below
+      my $range_result;
+      eval { $range_result = $self->_range_check($pitch); };
+      croak $@ if $@;
+      if (defined $range_result) {
+        push @notes, $range_result;
+        next;
       }
 
       my $note = $self->{_p2n_hook}( $pitch, $self->{_chrome} );
@@ -409,6 +419,26 @@ sub mode {
     undef $prev_pitch unless $self->{_sticky_state};
     return @_ > 1 ? @notes : $notes[0];
   }
+}
+
+sub _range_check {
+  my ( $self, $pitch ) = @_;
+  if ( $pitch < $self->{_min_pitch} ) {
+    if ( exists $self->{_min_pitch_hook} ) {
+      return $self->{_min_pitch_hook}($pitch);
+    } else {
+      die "pitch $pitch is too low\n";
+    }
+
+  } elsif ( $pitch > $self->{_max_pitch} ) {
+    if ( exists $self->{_max_pitch_hook} ) {
+      return $self->{_max_pitch_hook}($pitch);
+    } else {
+      die "pitch $pitch is too high\n";
+    }
+  }
+
+  return;
 }
 
 # Utility, converts arbitrary numbers into lilypond register notation
@@ -538,9 +568,8 @@ C<relative> and C<absolute> modes.
 =item *
 
 B<min_pitch> integer, by default 0, below which pitches passed to
-B<diatonic_pitch> or B<p2ly> will cause the module to throw an
-exception. To constrain pitches to what an 88-key piano is
-capable of, set:
+B<p2ly> will cause the module to by default throw an exception. To
+constrain pitches to what an 88-key piano is capable of, set:
 
   Music::LilyPondUtil->new( min_pitch => 21 );
 
@@ -551,9 +580,29 @@ easily be generated from those...so 0 is the minimum.
 
 =item *
 
+B<min_pitch_hook> code reference to handle minimum pitch cases instead
+of the default exception. The hook is passed the pitch as the sole
+argument, and should return C<undef> if the value is to be accepted, or
+something not defined to use that instead, or could throw an exception,
+which will be rethrown via C<croak>. One approach would be to silence
+the out-of-bounds pitches by returning a lilypond rest symbol:
+
+  Music::LilyPondUtil->new( min_pitch_hook => sub { 'r' } );
+
+One use for this is to generate pitch numbers (for example by a C<sin>
+function) and then silence or omit the pitches that fall outside a
+particular range of notes via the C<*_pitch_hook> hook functions.
+
+=item *
+
 B<max_pitch> integer, by default 108 (the highest note on a standard 88-
-key piano), above which pitches passed to B<diatonic_pitch> or B<p2ly>
-will cause the module to throw an exception.
+key piano), above which pitches passed to B<p2ly> will cause the module
+to by default throw an exception.
+
+=item *
+
+B<max_pitch_hook> code reference to handle minimum pitch cases instead
+of the default exception. For details see B<min_pitch_hook>, above.
 
 =item *
 

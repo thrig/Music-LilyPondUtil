@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 70;
+use Test::More tests => 72;
 use Test::Exception;
 BEGIN { use_ok('Music::LilyPondUtil') }
 
@@ -321,6 +321,10 @@ ok( !defined $lyu->prev_pitch, 'previous pitch cleared' );
 $lyu->sticky_state(0);
 ok( !$lyu->sticky_state, 'sticky_state is disabled' );
 
+########################################################################
+#
+# min/max pitch constraints
+
 $lyu = Music::LilyPondUtil->new;
 dies_ok( sub { $lyu->p2ly(-1) }, "min_pitch default" );
 is( $lyu->p2ly(12), 'c,,,', 'low pitch conversion' );
@@ -330,3 +334,11 @@ is( $lyu->p2ly(108), q{c'''''}, 'high pitch conversion' );
 $lyu = Music::LilyPondUtil->new( min_pitch => 21, max_pitch => 60 );
 dies_ok( sub { $lyu->p2ly(12) }, "custom min_pitch" );
 dies_ok( sub { $lyu->p2ly(61) }, "custom max_pitch" );
+
+$lyu = Music::LilyPondUtil->new(
+  min_pitch_hook => sub { 'r' },
+  max_pitch_hook => sub { 's' },
+);
+
+is( $lyu->p2ly(-999), 'r', 'min pitch hook' );
+is( $lyu->p2ly(999),  's', 'max pitch hook' );
