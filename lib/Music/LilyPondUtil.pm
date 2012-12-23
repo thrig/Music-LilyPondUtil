@@ -10,40 +10,16 @@ use warnings;
 use Carp qw(croak);
 use Scalar::Util qw(blessed looks_like_number);
 
-our $VERSION = '0.30';
+our $VERSION = '0.40';
 
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
 my $TRITONE      = 6;
 
-# same register characters used by both absolute and relative mode
-my %REGISTERS = (
-  0 => q(,,,,),
-  1 => q(,,,),
-  2 => q(,,),
-  3 => q(,),
-  4 => q(),
-  5 => q('),
-  6 => q(''),
-  7 => q('''),
-  8 => q(''''),
-  9 => q('''''),
-);
-my $REL_DEF_REG = 4;    # for relative mode, via %REGISTERS
-
-# and the reverse for notes2pitches
-my %REVREGS = (
-  q(,,,,)  => 0,
-  q(,,,)   => 1,
-  q(,,)    => 2,
-  q(,)     => 3,
-  q()      => 4,
-  q(')     => 5,
-  q('')    => 6,
-  q(''')   => 7,
-  q('''')  => 8,
-  q(''''') => 9,
-);
+# Default register - due to "c" in lilypond absolute notation mapping to
+# the fourth register, or MIDI pitch number 48. Used by the reg_*
+# utility subs.
+my $REL_DEF_REG = 4;
 
 # Just the note and register information - the 0,6 bit grants perhaps
 # too much leeway for relative motion (silly things like c,,,,,,,
@@ -127,10 +103,9 @@ sub diatonic_pitch {
     my $reg_symbol    = $3 // '';
 
     croak "unknown lilypond note $note" unless exists $N2P{$real_note};
-    croak "register out of range for note $note"
-      unless exists $REVREGS{$reg_symbol};
 
-    $pitch = $N2P{$diatonic_note} + $REVREGS{$reg_symbol} * $DEG_IN_SCALE;
+    $pitch =
+      $N2P{$diatonic_note} + $self->reg_sym2num($reg_symbol) * $DEG_IN_SCALE;
     $pitch %= $DEG_IN_SCALE if $self->{_ignore_register};
 
     if ( $pitch < $self->{_min_pitch} or $pitch > $self->{_max_pitch} ) {
@@ -191,12 +166,11 @@ sub mode {
         my $reg_symbol    = $3 // '';
 
         croak "unknown lilypond note $pitch" unless exists $N2P{$real_note};
-        croak "register out of range for note $pitch"
-          unless exists $REVREGS{$reg_symbol};
 
         # for relative-to-this just need the diatonic
         $prev_note =
-          $N2P{$diatonic_note} + $REVREGS{$reg_symbol} * $DEG_IN_SCALE;
+          $N2P{$diatonic_note} +
+          $self->reg_sym2num($reg_symbol) * $DEG_IN_SCALE;
 
       } else {
         croak("unknown pitch '$pitch'");
@@ -239,16 +213,13 @@ sub mode {
 
         my ( $diatonic_pitch, $real_pitch );
         if ( $self->{_mode} ne 'relative' ) {    # absolute
-          croak "register out of range for note $n"
-            unless exists $REVREGS{$reg_symbol};
-
-          # TODO see if can do this code regardless of mode, and still
-          # sanity check the register for absolute/relative-no-previous,
-          # but not for relative-with-previous, to avoid code
-          # duplication in abs/r-no-p blocks - or call subs with
-          # appropriate register numbers.
+              # TODO see if can do this code regardless of mode, and still
+              # sanity check the register for absolute/relative-no-previous,
+              # but not for relative-with-previous, to avoid code
+              # duplication in abs/r-no-p blocks - or call subs with
+              # appropriate register numbers.
           ( $diatonic_pitch, $real_pitch ) =
-            map { $N2P{$_} + $REVREGS{$reg_symbol} * $DEG_IN_SCALE }
+            map { $N2P{$_} + $self->reg_sym2num($reg_symbol) * $DEG_IN_SCALE }
             $diatonic_note, $real_note;
 
           # Account for edge cases of ces and bis and the like
@@ -260,12 +231,11 @@ sub mode {
         } else {    # relatively more complicated
 
           if ( !defined $prev_note ) {    # absolute if nothing prior
-            croak "register out of range for note $n"
-              unless exists $REVREGS{$reg_symbol};
-
             ( $diatonic_pitch, $real_pitch ) =
-              map { $N2P{$_} + $REVREGS{$reg_symbol} * $DEG_IN_SCALE }
-              $diatonic_note, $real_note;
+              map {
+              $N2P{$_} +
+                $self->reg_sym2num($reg_symbol) * $DEG_IN_SCALE
+              } $diatonic_note, $real_note;
 
             # Account for edge cases of ces and bis and the like
             my $delta = $diatonic_pitch - $real_pitch;
@@ -395,7 +365,7 @@ sub mode {
 
       my $register;
       if ( $self->{_mode} ne 'relative' ) {
-        $register = $REGISTERS{ int $pitch / $DEG_IN_SCALE };
+        $register = $self->reg_num2sym( $pitch / $DEG_IN_SCALE );
 
       } else {    # relatively more complicated
         my $rel_reg = $REL_DEF_REG;
@@ -422,7 +392,7 @@ sub mode {
             }
           }
         }
-        $register = $REGISTERS{$rel_reg};
+        $register = $self->reg_num2sym($rel_reg);
         $prev_pitch = $pitch if $self->{_keep_state};
       }
 
@@ -439,6 +409,34 @@ sub mode {
     undef $prev_pitch unless $self->{_sticky_state};
     return @_ > 1 ? @notes : $notes[0];
   }
+}
+
+# Utility, converts arbitrary numbers into lilypond register notation
+sub reg_num2sym {
+  my ( $self, $number ) = @_;
+  croak "register number must be numeric"
+    if !defined $number
+      or !looks_like_number $number;
+
+  $number = int $number;
+  my $symbol = q{};
+  if ( $number < $REL_DEF_REG ) {
+    $symbol = q{,} x ( $REL_DEF_REG - $number );
+  } elsif ( $number > $REL_DEF_REG ) {
+    $symbol = q{'} x ( $number - $REL_DEF_REG );
+  }
+  return $symbol;
+}
+
+# Utility, converts arbitrary ,, or ''' into appropriate register number
+sub reg_sym2num {
+  my ( $self, $symbol ) = @_;
+  croak "undefined register symbol" unless defined $symbol;
+  croak "invalid register symbol" unless $symbol =~ m/^(,|')*$/;
+
+  my $dir = $symbol =~ m/[,]/ ? -1 : 1;
+
+  return $REL_DEF_REG + $dir * length $symbol;
 }
 
 sub sticky_state {
@@ -669,6 +667,24 @@ C<c,>, and C<fisfis'''> the pitch for C<f'''>).
 For use with B<p2ly>. Get/set previous pitch (the state variable used
 with B<sticky_state> enabled in C<relative> B<mode> to maintain state
 across multiple calls to B<p2ly>).
+
+=item B<reg_num2sym> I<number>
+
+Utility method, converts an arbitrary number into a lilypond
+register symbol, with the empty string being returned for the
+default register C<4>.
+
+  $lyu->reg_num2sym(3)        # ,
+  $lyu->reg_num2sym(6)        # ''
+
+=item B<reg_sym2num> I<register>
+
+Utility method, converts an arbitrary lilypond register symbol into a
+register number. Pass the empty string to obtain the default register.
+
+  $lyu->reg_sym2num( q{,}  )  # 3
+  $lyu->reg_sym2num( q{}   )  # 4
+  $lyu->reg_sym2num( q{''} )  # 6
 
 =item B<sticky_state> I<optional boolean>
 
