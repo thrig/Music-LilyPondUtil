@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 58;
+use Test::More tests => 64;
 use Test::Exception;
 BEGIN { use_ok('Music::LilyPondUtil') }
 
@@ -89,7 +89,8 @@ is_deeply(
 #
 # p2ly - absolute mode (default)
 
-$lyu = Music::LilyPondUtil->new;
+# KLUGE on min_pitch to fit old tests to new defaults
+$lyu = Music::LilyPondUtil->new(min_pitch=>-30);
 
 is( $lyu->p2ly(60), q{c'},  q{absolute 60 -> c'} );
 is( $lyu->p2ly(59), q{b},   q{absolute 59 -> b} );
@@ -307,3 +308,13 @@ ok( !defined $lyu->prev_pitch, 'previous pitch cleared' );
 
 $lyu->sticky_state(0);
 ok( !$lyu->sticky_state, 'sticky_state is disabled' );
+
+$lyu = Music::LilyPondUtil->new;
+dies_ok( sub { $lyu->p2ly(-1) }, "min_pitch default" );
+is( $lyu->p2ly(12), 'c,,,', 'low pitch conversion' );
+dies_ok( sub { $lyu->p2ly(109) }, "max_pitch default" );
+is( $lyu->p2ly(108), q{c'''''}, 'high pitch conversion' );
+
+$lyu = Music::LilyPondUtil->new( min_pitch => 21, max_pitch => 60 );
+dies_ok( sub { $lyu->p2ly(12) }, "custom min_pitch" );
+dies_ok( sub { $lyu->p2ly(61) }, "custom max_pitch" );

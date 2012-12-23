@@ -10,7 +10,7 @@ use warnings;
 use Carp qw(croak);
 use Scalar::Util qw(blessed looks_like_number);
 
-our $VERSION = '0.22';
+our $VERSION = '0.30';
 
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
@@ -81,6 +81,12 @@ sub new {
   $self->{_keep_state}      = $param{keep_state}      // 1;
   $self->{_ignore_register} = $param{ignore_register} // 0;
 
+  # Default min_pitch of 21 causes too many problems for existing code,
+  # so minimum defaults to 0, which is a bit beyond the bottom of 88-key
+  # pianos. 108 is the top of a standard 88-key piano.
+  $self->{_min_pitch} = $param{min_pitch} // 0;
+  $self->{_max_pitch} = $param{max_pitch} // 108;
+
   $self->{_mode} = $param{mode} || 'absolute';
   croak("'mode' must be 'absolute' or 'relative'")
     if $self->{_mode} ne 'absolute' and $self->{_mode} ne 'relative';
@@ -126,6 +132,10 @@ sub diatonic_pitch {
 
     $pitch = $N2P{$diatonic_note} + $REVREGS{$reg_symbol} * $DEG_IN_SCALE;
     $pitch %= $DEG_IN_SCALE if $self->{_ignore_register};
+
+    if ( $pitch < $self->{_min_pitch} or $pitch > $self->{_max_pitch} ) {
+      croak "pitch $pitch is out of range\n";
+    }
 
   } else {
     croak("unknown note $note");
@@ -376,6 +386,10 @@ sub mode {
         next;
       }
 
+      if ( $pitch < $self->{_min_pitch} or $pitch > $self->{_max_pitch} ) {
+        croak "pitch $pitch is out of range\n";
+      }
+
       my $note = $self->{_p2n_hook}( $pitch, $self->{_chrome} );
       croak "could not lookup note for pitch '$pitch'" unless defined $note;
 
@@ -525,6 +539,26 @@ C<relative> and C<absolute> modes.
 
 =item *
 
+B<min_pitch> integer, by default 0, below which pitches passed to
+B<diatonic_pitch> or B<p2ly> will cause the module to throw an
+exception. To constrain pitches to what an 88-key piano is
+capable of, set:
+
+  Music::LilyPondUtil->new( min_pitch => 21 );
+
+Too much existing code allows for zero as a minimum pitch to set 21 by
+default, or if B<ignore_register> is set, pitches from B<notes2pitches>
+are constrained to zero through eleven, and relative lilypond notes can
+easily be generated from those...so 0 is the minimum.
+
+=item *
+
+B<max_pitch> integer, by default 108 (the highest note on a standard 88-
+key piano), above which pitches passed to B<diatonic_pitch> or B<p2ly>
+will cause the module to throw an exception.
+
+=item *
+
 B<mode> to set C<absolute> or C<relative> mode. Default is C<absolute>.
 Altering this changes how both B<notes2pitches> and B<p2ly> operate.
 Create two instances of the object if this is a problem, and set the
@@ -580,7 +614,8 @@ subsequent B<p2ly> calls will use the previously cached pitch.
 Returns the diatonic (here defined as the white notes on the piano)
 pitch number for a given lilypond absolute notation note, for example
 C<ceses'>, C<ces'>, C<c'>, C<cis'>, and C<cisis'> all return 60. This
-method is influenced by the B<ignore_register> option.
+method is influenced by the B<ignore_register>, B<min_pitch>, and
+B<max_pitch> parameters.
 
 =item B<ignore_register> I<optional boolean>
 
