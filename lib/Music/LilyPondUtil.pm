@@ -516,8 +516,9 @@ Music::LilyPondUtil - utility methods for lilypond data
 =head1 DESCRIPTION
 
 Utility methods for interacting with lilypond (as of version 2.16), most
-notably for the conversion of random integers to lilypond note names
-(there, and back again). The Western 12-tone system is assumed.
+notably for the conversion of integers to lilypond note names (or the
+other way around, for a subset of the lilypond notation). The Western
+12-tone system is assumed.
 
 The note conversions parse the lilypond defaults, including enharmonic
 equivalents such as C<bes> or C<ceses> (for C double flat or more simply
@@ -584,14 +585,15 @@ B<min_pitch_hook> code reference to handle minimum pitch cases instead
 of the default exception. The hook is passed the pitch as the sole
 argument, and should return C<undef> if the value is to be accepted, or
 something not defined to use that instead, or could throw an exception,
-which will be rethrown via C<croak>. One approach would be to silence
+which will be re-thrown via C<croak>. One approach would be to silence
 the out-of-bounds pitches by returning a lilypond rest symbol:
 
   Music::LilyPondUtil->new( min_pitch_hook => sub { 'r' } );
 
-One use for this is to generate pitch numbers (for example by a C<sin>
-function) and then silence or omit the pitches that fall outside a
-particular range of notes via the C<*_pitch_hook> hook functions.
+One use for this is to generate pitch numbers via some mechanism and
+then silence or omit the pitches that fall outside a particular range of
+notes via the C<*_pitch_hook> hook functions. See L</"EXAMPLES"> for
+sample code.
 
 =item *
 
@@ -602,7 +604,12 @@ to by default throw an exception.
 =item *
 
 B<max_pitch_hook> code reference to handle minimum pitch cases instead
-of the default exception. For details see B<min_pitch_hook>, above.
+of the default exception. For details see B<min_pitch_hook>, above. For
+another example, return the empty string if the maximum pitch is
+exceeded; this differs from replacing the note with a C<r> or C<s>,
+which in lilypond both advance the time by some duration.
+
+  Music::LilyPondUtil->new( max_pitch_hook => sub { '' } );
 
 =item *
 
@@ -744,6 +751,44 @@ Get/set B<sticky_state> param.
 Get/set B<strip_rests> param.
 
 =back
+
+=head1 EXAMPLES
+
+An idea for composition: generate pitch numbers via some mathematical
+function, and omit the notes if they fall outside a particular range.
+This method requires the use of a graphing calculator, knowledge of
+various mathematical functions, and spare time, though may produce
+interesting results, depending on how the function(s) interact with the
+playable range.
+
+  use Music::LilyPondUtil ();
+  my $lyu = Music::LilyPondUtil->new(
+    min_pitch      => 59,
+    max_pitch      => 79,
+    min_pitch_hook => sub { '' },
+    max_pitch_hook => sub { '' },
+  );
+  
+  # generate notes from mathematical function
+  my @notes;
+  for my $t ( 1 .. 174 ) {
+    my $pitch = 50 * cos( $t / 25 ) + 3 * sin( 2 * $t ) + 22;
+    push @notes, grep length $_ > 0, $lyu->p2ly($pitch);
+  }
+  
+  # replace repeated notes with rests
+  for my $ni ( 1 .. $#notes ) {
+    $notes[$ni] = 'r' if $notes[$ni] eq $notes[ $ni - 1 ];
+  }
+  
+  print "@notes\n";
+
+This output could then be piped to the C<ly-fu> utility of
+L<App::MusicTools>, for example if saved as C<domath>:
+
+  $ perl domath | ly-fu --open --instrument=drawbar\ organ --absolute -
+
+Which in turn would require C<lilypond>, a PDF viewer, and a MIDI player.
 
 =head1 SEE ALSO
 
