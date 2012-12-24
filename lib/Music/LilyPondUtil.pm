@@ -10,7 +10,7 @@ use warnings;
 use Carp qw(croak);
 use Scalar::Util qw(blessed looks_like_number);
 
-our $VERSION = '0.40';
+our $VERSION = '0.41';
 
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
@@ -365,7 +365,7 @@ sub mode {
       my $range_result;
       eval { $range_result = $self->_range_check($pitch); };
       croak $@ if $@;
-      if (defined $range_result) {
+      if ( defined $range_result ) {
         push @notes, $range_result;
         next;
       }
@@ -425,14 +425,16 @@ sub _range_check {
   my ( $self, $pitch ) = @_;
   if ( $pitch < $self->{_min_pitch} ) {
     if ( exists $self->{_min_pitch_hook} ) {
-      return $self->{_min_pitch_hook}($pitch);
+      return $self->{_min_pitch_hook}( $pitch, $self->{_min_pitch},
+        $self->{_max_pitch} );
     } else {
       die "pitch $pitch is too low\n";
     }
 
   } elsif ( $pitch > $self->{_max_pitch} ) {
     if ( exists $self->{_max_pitch_hook} ) {
-      return $self->{_max_pitch_hook}($pitch);
+      return $self->{_max_pitch_hook}( $pitch, $self->{_min_pitch},
+        $self->{_max_pitch} );
     } else {
       die "pitch $pitch is too high\n";
     }
@@ -581,12 +583,13 @@ easily be generated from those...so 0 is the minimum.
 
 =item *
 
-B<min_pitch_hook> code reference to handle minimum pitch cases instead
-of the default exception. The hook is passed the pitch as the sole
-argument, and should return C<undef> if the value is to be accepted, or
-something not defined to use that instead, or could throw an exception,
-which will be re-thrown via C<croak>. One approach would be to silence
-the out-of-bounds pitches by returning a lilypond rest symbol:
+B<min_pitch_hook> code reference to handle minimum pitch cases
+instead of the default exception. The hook is passed the pitch,
+min_pitch, and max_pitch as arguments. The hook must return C<undef> if
+the value is to be accepted, or something not defined to use that
+instead, or could throw an exception, which will be re-thrown via
+C<croak>. One approach would be to silence the out-of-bounds pitches by
+returning a lilypond rest symbol:
 
   Music::LilyPondUtil->new( min_pitch_hook => sub { 'r' } );
 
@@ -604,12 +607,9 @@ to by default throw an exception.
 =item *
 
 B<max_pitch_hook> code reference to handle minimum pitch cases instead
-of the default exception. For details see B<min_pitch_hook>, above. For
-another example, return the empty string if the maximum pitch is
-exceeded; this differs from replacing the note with a C<r> or C<s>,
-which in lilypond both advance the time by some duration.
-
-  Music::LilyPondUtil->new( max_pitch_hook => sub { '' } );
+of the default exception. The hook is passed the pitch, min_pitch, and
+max_pitch as arguments. Return values are handled as for the
+B<min_pitch_hook>, above.
 
 =item *
 
