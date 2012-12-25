@@ -10,7 +10,7 @@ use warnings;
 use Carp qw(croak);
 use Scalar::Util qw(blessed looks_like_number);
 
-our $VERSION = '0.42';
+our $VERSION = '0.43';
 
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
@@ -790,11 +790,11 @@ L<App::MusicTools>, for example if saved as C<domath>:
 
 Which in turn would require C<lilypond>, a PDF viewer, and a MIDI player.
 
-This more complicated example uses the C<constrain_pitch> method of
+This more complicated example uses the C<reflect_pitch> method of
 L<Music::AtonalUtil> to fold out-of-bounds pitches to within the limits:
 
-  use Music::AtonalUtil ();
-  use Music::LilyPondUtil ();
+  use Music::AtonalUtil;
+  use Music::LilyPondUtil;
 
   my $atu = Music::AtonalUtil->new;
   my $lyu = Music::LilyPondUtil->new(
@@ -806,23 +806,13 @@ L<Music::AtonalUtil> to fold out-of-bounds pitches to within the limits:
 
   sub fold {
     my ($p, $min, $max, $self) = @_;
-    return $self->p2ly( $atu->constrain_pitch( $p, $min, $max ) );
+    return $self->p2ly( $atu->reflect_pitch( $p, $min, $max ) );
   }
 
 =head1 SEE ALSO
 
-=over 4
-
-=item *
-
 http://www.lilypond.org/ and most notably the Learning and
 Notation manuals.
-
-=item *
-
-L<App::MusicTools> whose command line tools make use of this module.
-
-=back
 
 =head1 AUTHOR
 
