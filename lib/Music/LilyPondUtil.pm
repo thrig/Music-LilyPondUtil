@@ -811,7 +811,7 @@ L<Music::AtonalUtil> to fold out-of-bounds pitches to within the limits:
 
 =head1 SEE ALSO
 
-http://www.lilypond.org/ and most notably the Learning and
+L<http://www.lilypond.org/> and most notably the Learning and
 Notation manuals.
 
 =head1 AUTHOR
