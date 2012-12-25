@@ -10,7 +10,7 @@ use warnings;
 use Carp qw(croak);
 use Scalar::Util qw(blessed looks_like_number);
 
-our $VERSION = '0.41';
+our $VERSION = '0.42';
 
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
@@ -426,7 +426,7 @@ sub _range_check {
   if ( $pitch < $self->{_min_pitch} ) {
     if ( exists $self->{_min_pitch_hook} ) {
       return $self->{_min_pitch_hook}( $pitch, $self->{_min_pitch},
-        $self->{_max_pitch} );
+        $self->{_max_pitch}, $self );
     } else {
       die "pitch $pitch is too low\n";
     }
@@ -434,7 +434,7 @@ sub _range_check {
   } elsif ( $pitch > $self->{_max_pitch} ) {
     if ( exists $self->{_max_pitch_hook} ) {
       return $self->{_max_pitch_hook}( $pitch, $self->{_min_pitch},
-        $self->{_max_pitch} );
+        $self->{_max_pitch}, $self );
     } else {
       die "pitch $pitch is too high\n";
     }
@@ -583,11 +583,11 @@ easily be generated from those...so 0 is the minimum.
 
 =item *
 
-B<min_pitch_hook> code reference to handle minimum pitch cases
-instead of the default exception. The hook is passed the pitch,
-min_pitch, and max_pitch as arguments. The hook must return C<undef> if
-the value is to be accepted, or something not defined to use that
-instead, or could throw an exception, which will be re-thrown via
+B<min_pitch_hook> code reference to handle minimum pitch cases instead
+of the default exception. The hook is passed the pitch, min_pitch,
+max_pitch, and the object itself as arguments. The hook must return
+C<undef> if the value is to be accepted, or something not defined to use
+that instead, or could throw an exception, which will be re-thrown via
 C<croak>. One approach would be to silence the out-of-bounds pitches by
 returning a lilypond rest symbol:
 
@@ -607,9 +607,9 @@ to by default throw an exception.
 =item *
 
 B<max_pitch_hook> code reference to handle minimum pitch cases instead
-of the default exception. The hook is passed the pitch, min_pitch, and
-max_pitch as arguments. Return values are handled as for the
-B<min_pitch_hook>, above.
+of the default exception. The hook is passed the pitch, min_pitch,
+max_pitch, and the object itself as arguments. Return values are handled
+as for the B<min_pitch_hook>, above.
 
 =item *
 
@@ -759,7 +759,7 @@ function, and omit the notes if they fall outside a particular range.
 This method requires the use of a graphing calculator, knowledge of
 various mathematical functions, and spare time, though may produce
 interesting results, depending on how the function(s) interact with the
-playable range.
+playable range. This example strips pitches that exceed the limits:
 
   use Music::LilyPondUtil ();
   my $lyu = Music::LilyPondUtil->new(
@@ -789,6 +789,25 @@ L<App::MusicTools>, for example if saved as C<domath>:
   $ perl domath | ly-fu --open --instrument=drawbar\ organ --absolute -
 
 Which in turn would require C<lilypond>, a PDF viewer, and a MIDI player.
+
+This more complicated example uses the C<constrain_pitch> method of
+L<Music::AtonalUtil> to fold out-of-bounds pitches to within the limits:
+
+  use Music::AtonalUtil ();
+  use Music::LilyPondUtil ();
+
+  my $atu = Music::AtonalUtil->new;
+  my $lyu = Music::LilyPondUtil->new(
+    min_pitch      => 59,
+    max_pitch      => 79,
+    min_pitch_hook => \&fold,
+    max_pitch_hook => \&fold,
+  );
+
+  sub fold {
+    my ($p, $min, $max, $self) = @_;
+    return $self->p2ly( $atu->constrain_pitch( $p, $min, $max ) );
+  }
 
 =head1 SEE ALSO
 
