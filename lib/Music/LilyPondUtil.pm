@@ -1,3 +1,5 @@
+# -*- Perl -*-
+#
 # http://www.lilypond.org/ related utility code (mostly to transition
 # between Perl processing integers and the related appropriate letter
 # names for the black dots in lilypond).
@@ -820,7 +822,7 @@ Jeremy Mates, E<lt>jmates@cpan.orgE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2012 by Jeremy Mates
+Copyright (C) 2012-2013 by Jeremy Mates
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself, either Perl version 5.16 or, at
