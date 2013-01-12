@@ -12,7 +12,7 @@ use warnings;
 use Carp qw(croak);
 use Scalar::Util qw(blessed looks_like_number);
 
-our $VERSION = '0.43';
+our $VERSION = '0.50';
 
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
@@ -48,48 +48,42 @@ my %TTDIR = (
 #
 # SUBROUTINES
 
-sub new {
-  my ( $class, %param ) = @_;
-  my $self = {};
+sub _range_check {
+  my ( $self, $pitch ) = @_;
+  if ( $pitch < $self->{_min_pitch} ) {
+    if ( exists $self->{_min_pitch_hook} ) {
+      return $self->{_min_pitch_hook}
+        ( $pitch, $self->{_min_pitch}, $self->{_max_pitch}, $self );
+    } else {
+      die "pitch $pitch is too low\n";
+    }
 
-  $self->{_chrome} = $param{chrome} || 'sharps';
-  croak("chrome must be 'sharps' or 'flats'")
-    unless exists $P2N{ $self->{_chrome} };
-
-  $self->{_keep_state}      = $param{keep_state}      // 1;
-  $self->{_ignore_register} = $param{ignore_register} // 0;
-
-  # Default min_pitch of 21 causes too many problems for existing code,
-  # so minimum defaults to 0, which is a bit beyond the bottom of 88-key
-  # pianos. 108 is the top of a standard 88-key piano.
-  $self->{_min_pitch} = $param{min_pitch} // 0;
-  $self->{_max_pitch} = $param{max_pitch} // 108;
-
-  if ( exists $param{min_pitch_hook} ) {
-    croak "min_pitch_hook must be code ref"
-      unless ref $param{min_pitch_hook} eq 'CODE';
-    $self->{_min_pitch_hook} = $param{min_pitch_hook};
-  }
-  if ( exists $param{max_pitch_hook} ) {
-    croak "max_pitch_hook must be code ref"
-      unless ref $param{max_pitch_hook} eq 'CODE';
-    $self->{_max_pitch_hook} = $param{max_pitch_hook};
+  } elsif ( $pitch > $self->{_max_pitch} ) {
+    if ( exists $self->{_max_pitch_hook} ) {
+      return $self->{_max_pitch_hook}
+        ( $pitch, $self->{_min_pitch}, $self->{_max_pitch}, $self );
+    } else {
+      die "pitch $pitch is too high\n";
+    }
   }
 
-  $self->{_mode} = $param{mode} || 'absolute';
-  croak("'mode' must be 'absolute' or 'relative'")
-    if $self->{_mode} ne 'absolute' and $self->{_mode} ne 'relative';
+  return;
+}
 
-  $self->{_p2n_hook} = $param{p2n_hook}
-    || sub { $P2N{ $_[1] }->{ $_[0] % $DEG_IN_SCALE } };
-  croak("'p2n_hook' must be code ref")
-    unless ref $self->{_p2n_hook} eq 'CODE';
+sub _symbol2relreg {
+  my ($symbol) = @_;
+  $symbol ||= q{};
 
-  $self->{_sticky_state} = $param{sticky_state} // 0;
-  $self->{_strip_rests}  = $param{strip_rests}  // 0;
+  # no leap, within three stave lines of previous note
+  return 0 if length $symbol == 0;
 
-  bless $self, $class;
-  return $self;
+  die "invalid register symbol $symbol\n"
+    if $symbol !~ m/^(([,'])\g{-1}*)$/;
+
+  my $count = length $1;
+  $count *= $2 eq q{'} ? 1 : -1;
+
+  return $count;
 }
 
 sub chrome {
@@ -99,6 +93,16 @@ sub chrome {
     $self->{_chrome} = $chrome;
   }
   return $self->{_chrome};
+}
+
+sub clear_prev_note {
+  my ($self) = @_;
+  undef $self->{prev_note};
+}
+
+sub clear_prev_pitch {
+  my ($self) = @_;
+  undef $self->{prev_pitch};
 }
 
 # diatonic (piano white key) pitch number for a given input note (like
@@ -150,83 +154,102 @@ sub mode {
   return $self->{_mode};
 }
 
-########################################################################
-#
-# lilypond notes to pitch numbers
+sub new {
+  my ( $class, %param ) = @_;
+  my $self = {};
 
-{
-  my $prev_note;
+  $self->{_chrome} = $param{chrome} || 'sharps';
+  croak("chrome must be 'sharps' or 'flats'")
+    unless exists $P2N{ $self->{_chrome} };
 
-  sub clear_prev_note {
-    my ($self) = @_;
-    undef $prev_note;
+  $self->{_keep_state}      = $param{keep_state}      // 1;
+  $self->{_ignore_register} = $param{ignore_register} // 0;
+
+  # Default min_pitch of 21 causes too many problems for existing code,
+  # so minimum defaults to 0, which is a bit beyond the bottom of 88-key
+  # pianos. 108 is the top of a standard 88-key piano.
+  $self->{_min_pitch} = $param{min_pitch} // 0;
+  $self->{_max_pitch} = $param{max_pitch} // 108;
+
+  if ( exists $param{min_pitch_hook} ) {
+    croak "min_pitch_hook must be code ref"
+      unless ref $param{min_pitch_hook} eq 'CODE';
+    $self->{_min_pitch_hook} = $param{min_pitch_hook};
+  }
+  if ( exists $param{max_pitch_hook} ) {
+    croak "max_pitch_hook must be code ref"
+      unless ref $param{max_pitch_hook} eq 'CODE';
+    $self->{_max_pitch_hook} = $param{max_pitch_hook};
   }
 
-  # MUST NOT accept raw pitch numbers, as who knows if "61" is a "cis"
-  # or "des" or the like, which will in turn affect the relative
-  # calculations!
-  sub prev_note {
-    my ( $self, $pitch ) = @_;
-    if ( defined $pitch ) {
-      if ( $pitch =~ m/^$LY_NOTE_RE/ ) {
-        # TODO duplicates (portions of) same code, below
-        my $real_note     = $1;
-        my $diatonic_note = $2;
-        my $reg_symbol    = $3 // '';
+  $self->{_mode} = $param{mode} || 'absolute';
+  croak("'mode' must be 'absolute' or 'relative'")
+    if $self->{_mode} ne 'absolute' and $self->{_mode} ne 'relative';
 
-        croak "unknown lilypond note $pitch" unless exists $N2P{$real_note};
+  $self->{_p2n_hook} = $param{p2n_hook}
+    || sub { $P2N{ $_[1] }->{ $_[0] % $DEG_IN_SCALE } };
+  croak("'p2n_hook' must be code ref")
+    unless ref $self->{_p2n_hook} eq 'CODE';
 
-        # for relative-to-this just need the diatonic
-        $prev_note =
-          $N2P{$diatonic_note} +
-          $self->reg_sym2num($reg_symbol) * $DEG_IN_SCALE;
+  $self->{_sticky_state} = $param{sticky_state} // 0;
+  $self->{_strip_rests}  = $param{strip_rests}  // 0;
 
-      } else {
-        croak("unknown pitch '$pitch'");
-      }
-    }
-    return $prev_note;
-  }
+  bless $self, $class;
+  return $self;
+}
 
-  sub notes2pitches {
-    my $self = shift;
-    my @pitches;
+sub notes2pitches {
+  my $self = shift;
+  my @pitches;
 
-    for my $n (@_) {
-      # pass through what hopefully are raw pitch numbers, otherwise parse
-      # note from subset of the lilypond note format
-      if ( !defined $n ) {
-        # might instead blow up? or have option to blow up...
-        push @pitches, undef unless $self->{_strip_rests};
+  for my $n (@_) {
+    # pass through what hopefully are raw pitch numbers, otherwise parse
+    # note from subset of the lilypond note format
+    if ( !defined $n ) {
+      # might instead blow up? or have option to blow up...
+      push @pitches, undef unless $self->{_strip_rests};
 
-      } elsif ( $n =~ m/^(-?\d+)$/ ) {
-        push @pitches, $n;
+    } elsif ( $n =~ m/^(-?\d+)$/ ) {
+      push @pitches, $n;
 
-      } elsif ( $n =~ m/^(?i)[rs]/ or $n =~ m/\\rest/ ) {
-        # rests or lilypond 'silent' bits
-        push @pitches, undef unless $self->{_strip_rests};
+    } elsif ( $n =~ m/^(?i)[rs]/ or $n =~ m/\\rest/ ) {
+      # rests or lilypond 'silent' bits
+      push @pitches, undef unless $self->{_strip_rests};
 
-      } elsif ( $n =~ m/^$LY_NOTE_RE/ ) {
-        # "diatonic" (here, the white notes of a piano) are necessary
-        # for leap calculations in relative mode, as "cisis" goes down
-        # to "aeses" despite the real notes ("d" and "g," in absolute
-        # mode) being a fifth apart. Another way to think of it: the
-        # diatonic "c" and "a" of "cisis" and "aeses" are within three
-        # stave lines of one another; anything involving three or more
-        # stave lines is a leap.
-        my $real_note     = $1;
-        my $diatonic_note = $2;
-        my $reg_symbol    = $3 // '';
+    } elsif ( $n =~ m/^$LY_NOTE_RE/ ) {
+      # "diatonic" (here, the white notes of a piano) are necessary
+      # for leap calculations in relative mode, as "cisis" goes down
+      # to "aeses" despite the real notes ("d" and "g," in absolute
+      # mode) being a fifth apart. Another way to think of it: the
+      # diatonic "c" and "a" of "cisis" and "aeses" are within three
+      # stave lines of one another; anything involving three or more
+      # stave lines is a leap.
+      my $real_note     = $1;
+      my $diatonic_note = $2;
+      my $reg_symbol    = $3 // '';
 
-        croak "unknown lilypond note $n" unless exists $N2P{$real_note};
+      croak "unknown lilypond note $n" unless exists $N2P{$real_note};
 
-        my ( $diatonic_pitch, $real_pitch );
-        if ( $self->{_mode} ne 'relative' ) {    # absolute
-              # TODO see if can do this code regardless of mode, and still
-              # sanity check the register for absolute/relative-no-previous,
-              # but not for relative-with-previous, to avoid code
-              # duplication in abs/r-no-p blocks - or call subs with
-              # appropriate register numbers.
+      my ( $diatonic_pitch, $real_pitch );
+      if ( $self->{_mode} ne 'relative' ) {    # absolute
+            # TODO see if can do this code regardless of mode, and still
+            # sanity check the register for absolute/relative-no-previous,
+            # but not for relative-with-previous, to avoid code
+            # duplication in abs/r-no-p blocks - or call subs with
+            # appropriate register numbers.
+        ( $diatonic_pitch, $real_pitch ) =
+          map { $N2P{$_} + $self->reg_sym2num($reg_symbol) * $DEG_IN_SCALE }
+          $diatonic_note, $real_note;
+
+        # Account for edge cases of ces and bis and the like
+        my $delta = $diatonic_pitch - $real_pitch;
+        if ( abs($delta) > $TRITONE ) {
+          $real_pitch += $delta > 0 ? $DEG_IN_SCALE : -$DEG_IN_SCALE;
+        }
+
+      } else {    # relatively more complicated
+
+        if ( !defined $self->{prev_note} ) {    # absolute if nothing prior
           ( $diatonic_pitch, $real_pitch ) =
             map { $N2P{$_} + $self->reg_sym2num($reg_symbol) * $DEG_IN_SCALE }
             $diatonic_note, $real_note;
@@ -237,212 +260,172 @@ sub mode {
             $real_pitch += $delta > 0 ? $DEG_IN_SCALE : -$DEG_IN_SCALE;
           }
 
-        } else {    # relatively more complicated
+        } else {                                # meat of relativity
+          my $reg_number =
+            int( $self->{prev_note} / $DEG_IN_SCALE ) * $DEG_IN_SCALE;
 
-          if ( !defined $prev_note ) {    # absolute if nothing prior
-            ( $diatonic_pitch, $real_pitch ) =
-              map {
-              $N2P{$_} +
-                $self->reg_sym2num($reg_symbol) * $DEG_IN_SCALE
-              } $diatonic_note, $real_note;
-
-            # Account for edge cases of ces and bis and the like
-            my $delta = $diatonic_pitch - $real_pitch;
-            if ( abs($delta) > $TRITONE ) {
-              $real_pitch += $delta > 0 ? $DEG_IN_SCALE : -$DEG_IN_SCALE;
-            }
-
-          } else {    # meat of relativity
-            my $reg_number =
-              int( $prev_note / $DEG_IN_SCALE ) * $DEG_IN_SCALE;
-
-            my $reg_delta = $prev_note % $DEG_IN_SCALE - $N2P{$diatonic_note};
-            if ( abs($reg_delta) > $TRITONE ) {
-              $reg_number += $reg_delta > 0 ? $DEG_IN_SCALE : -$DEG_IN_SCALE;
-            }
-
-            # adjust register by the required relative offset
-            my $reg_offset = _symbol2relreg($reg_symbol);
-            if ( $reg_offset != 0 ) {
-              $reg_number += $reg_offset * $DEG_IN_SCALE;
-            }
-
-            ( $diatonic_pitch, $real_pitch ) =
-              map { $reg_number + $N2P{$_} } $diatonic_note, $real_note;
-
-            my $delta = $diatonic_pitch - $real_pitch;
-            if ( abs($delta) > $TRITONE ) {
-              $real_pitch += $delta > 0 ? $DEG_IN_SCALE : -$DEG_IN_SCALE;
-            }
+          my $reg_delta =
+            $self->{prev_note} % $DEG_IN_SCALE - $N2P{$diatonic_note};
+          if ( abs($reg_delta) > $TRITONE ) {
+            $reg_number += $reg_delta > 0 ? $DEG_IN_SCALE : -$DEG_IN_SCALE;
           }
 
-          $prev_note = $diatonic_pitch if $self->{_keep_state};
-        }
+          # adjust register by the required relative offset
+          my $reg_offset = _symbol2relreg($reg_symbol);
+          if ( $reg_offset != 0 ) {
+            $reg_number += $reg_offset * $DEG_IN_SCALE;
+          }
 
-        push @pitches, $real_pitch;
+          ( $diatonic_pitch, $real_pitch ) =
+            map { $reg_number + $N2P{$_} } $diatonic_note, $real_note;
 
-      } else {
-        croak "unknown note '$n'";
-      }
-    }
-
-    if ( $self->{_ignore_register} ) {
-      for my $p (@pitches) {
-        $p %= $DEG_IN_SCALE if defined $p;
-      }
-    }
-
-    undef $prev_note unless $self->{_sticky_state};
-
-    return @pitches > 1 ? @pitches : $pitches[0];
-  }
-
-  sub _symbol2relreg {
-    my ($symbol) = @_;
-    $symbol ||= q{};
-
-    # no leap, within three stave lines of previous note
-    return 0 if length $symbol == 0;
-
-    die "invalid register symbol $symbol\n"
-      if $symbol !~ m/^(([,'])\g{-1}*)$/;
-
-    my $count = length $1;
-    $count *= $2 eq q{'} ? 1 : -1;
-
-    return $count;
-  }
-
-}
-
-########################################################################
-#
-# pitch numbers to lilypond notes
-
-{
-  my $prev_pitch;
-
-  sub clear_prev_pitch {
-    my ($self) = @_;
-    undef $prev_pitch;
-  }
-
-  sub prev_pitch {
-    my ( $self, $pitch ) = @_;
-    if ( defined $pitch ) {
-      if ( blessed $pitch and $pitch->can("pitch") ) {
-        $prev_pitch = $pitch->pitch;
-      } elsif ( looks_like_number $pitch ) {
-        $prev_pitch = $pitch;
-      } else {
-        croak("unknown pitch '$pitch'");
-      }
-    }
-    return $prev_pitch;
-  }
-
-  # Converts pitches to lilypond names
-  sub p2ly {
-    my $self = shift;
-
-    my @notes;
-    for my $obj (@_) {
-      my $pitch;
-      if ( !defined $obj ) {
-        croak "cannot convert undefined value to lilypond element\n";
-      } elsif ( blessed $obj and $obj->can("pitch") ) {
-        $pitch = $obj->pitch;
-      } elsif ( looks_like_number $obj) {
-        $pitch = $obj;
-      } else {
-        # pass through on unknowns (could be rests or who knows what)
-        push @notes, $obj;
-        next;
-      }
-
-      # Response handling on range check:
-      # * exception - out of bounds, default die() handler tripped
-      # * defined return value - got something from a hook function, use that
-      # * undefined - pitch is within bounds, continue with code below
-      my $range_result;
-      eval { $range_result = $self->_range_check($pitch); };
-      croak $@ if $@;
-      if ( defined $range_result ) {
-        push @notes, $range_result;
-        next;
-      }
-
-      my $note = $self->{_p2n_hook}( $pitch, $self->{_chrome} );
-      croak "could not lookup note for pitch '$pitch'" unless defined $note;
-
-      my $register;
-      if ( $self->{_mode} ne 'relative' ) {
-        $register = $self->reg_num2sym( $pitch / $DEG_IN_SCALE );
-
-      } else {    # relatively more complicated
-        my $rel_reg = $REL_DEF_REG;
-        if ( defined $prev_pitch ) {
-          my $delta = int( $pitch - $prev_pitch );
-          if ( abs($delta) >= $TRITONE ) {    # leaps need , or ' variously
-            if ( $delta % $DEG_IN_SCALE == $TRITONE ) {
-              $rel_reg += int( $delta / $DEG_IN_SCALE );
-
-              # Adjust for tricky changing tritone default direction
-              my $default_dir =
-                $TTDIR{ $self->{_chrome} }->{ $prev_pitch % $DEG_IN_SCALE };
-              if ( $delta > 0 and $default_dir < 0 ) {
-                $rel_reg++;
-              } elsif ( $delta < 0 and $default_dir > 0 ) {
-                $rel_reg--;
-              }
-
-            } else {    # not tritone, but leap
-                        # TT adjust is to push <1 leaps out so become 1
-              $rel_reg +=
-                int( ( $delta + ( $delta > 0 ? $TRITONE : -$TRITONE ) ) /
-                  $DEG_IN_SCALE );
-            }
+          my $delta = $diatonic_pitch - $real_pitch;
+          if ( abs($delta) > $TRITONE ) {
+            $real_pitch += $delta > 0 ? $DEG_IN_SCALE : -$DEG_IN_SCALE;
           }
         }
-        $register = $self->reg_num2sym($rel_reg);
-        $prev_pitch = $pitch if $self->{_keep_state};
+
+        $self->{prev_note} = $diatonic_pitch if $self->{_keep_state};
       }
 
-      # Do not care about register (even in absolute mode) if keeping state
-      if ( $self->{_keep_state} ) {
-        croak "register out of range for pitch '$pitch'"
-          unless defined $register;
-      } else {
-        $register = '';
-      }
-      push @notes, $note . $register;
+      push @pitches, $real_pitch;
+
+    } else {
+      croak "unknown note '$n'";
     }
-
-    undef $prev_pitch unless $self->{_sticky_state};
-    return @_ > 1 ? @notes : $notes[0];
   }
+
+  if ( $self->{_ignore_register} ) {
+    for my $p (@pitches) {
+      $p %= $DEG_IN_SCALE if defined $p;
+    }
+  }
+
+  undef $self->{prev_note} unless $self->{_sticky_state};
+
+  return @pitches > 1 ? @pitches : $pitches[0];
 }
 
-sub _range_check {
+# Converts pitches to lilypond names
+sub p2ly {
+  my $self = shift;
+
+  my @notes;
+  for my $obj (@_) {
+    my $pitch;
+    if ( !defined $obj ) {
+      croak "cannot convert undefined value to lilypond element\n";
+    } elsif ( blessed $obj and $obj->can("pitch") ) {
+      $pitch = $obj->pitch;
+    } elsif ( looks_like_number $obj) {
+      $pitch = $obj;
+    } else {
+      # pass through on unknowns (could be rests or who knows what)
+      push @notes, $obj;
+      next;
+    }
+
+    # Response handling on range check:
+    # * exception - out of bounds, default die() handler tripped
+    # * defined return value - got something from a hook function, use that
+    # * undefined - pitch is within bounds, continue with code below
+    my $range_result;
+    eval { $range_result = $self->_range_check($pitch); };
+    croak $@ if $@;
+    if ( defined $range_result ) {
+      push @notes, $range_result;
+      next;
+    }
+
+    my $note = $self->{_p2n_hook}( $pitch, $self->{_chrome} );
+    croak "could not lookup note for pitch '$pitch'" unless defined $note;
+
+    my $register;
+    if ( $self->{_mode} ne 'relative' ) {
+      $register = $self->reg_num2sym( $pitch / $DEG_IN_SCALE );
+
+    } else {    # relatively more complicated
+      my $rel_reg = $REL_DEF_REG;
+      if ( defined $self->{prev_pitch} ) {
+        my $delta = int( $pitch - $self->{prev_pitch} );
+        if ( abs($delta) >= $TRITONE ) {    # leaps need , or ' variously
+          if ( $delta % $DEG_IN_SCALE == $TRITONE ) {
+            $rel_reg += int( $delta / $DEG_IN_SCALE );
+
+            # Adjust for tricky changing tritone default direction
+            my $default_dir =
+              $TTDIR{ $self->{_chrome} }
+              ->{ $self->{prev_pitch} % $DEG_IN_SCALE };
+            if ( $delta > 0 and $default_dir < 0 ) {
+              $rel_reg++;
+            } elsif ( $delta < 0 and $default_dir > 0 ) {
+              $rel_reg--;
+            }
+
+          } else {    # not tritone, but leap
+                      # TT adjust is to push <1 leaps out so become 1
+            $rel_reg +=
+              int( ( $delta + ( $delta > 0 ? $TRITONE : -$TRITONE ) ) /
+                $DEG_IN_SCALE );
+          }
+        }
+      }
+      $register = $self->reg_num2sym($rel_reg);
+      $self->{prev_pitch} = $pitch if $self->{_keep_state};
+    }
+
+    # Do not care about register (even in absolute mode) if keeping state
+    if ( $self->{_keep_state} ) {
+      croak "register out of range for pitch '$pitch'"
+        unless defined $register;
+    } else {
+      $register = '';
+    }
+    push @notes, $note . $register;
+  }
+
+  undef $self->{prev_pitch} unless $self->{_sticky_state};
+  return @_ > 1 ? @notes : $notes[0];
+}
+
+# MUST NOT accept raw pitch numbers, as who knows if "61" is a "cis"
+# or "des" or the like, which will in turn affect the relative
+# calculations!
+sub prev_note {
   my ( $self, $pitch ) = @_;
-  if ( $pitch < $self->{_min_pitch} ) {
-    if ( exists $self->{_min_pitch_hook} ) {
-      return $self->{_min_pitch_hook}( $pitch, $self->{_min_pitch},
-        $self->{_max_pitch}, $self );
-    } else {
-      die "pitch $pitch is too low\n";
-    }
+  if ( defined $pitch ) {
+    if ( $pitch =~ m/^$LY_NOTE_RE/ ) {
+      # TODO duplicates (portions of) same code, below
+      my $real_note     = $1;
+      my $diatonic_note = $2;
+      my $reg_symbol    = $3 // '';
 
-  } elsif ( $pitch > $self->{_max_pitch} ) {
-    if ( exists $self->{_max_pitch_hook} ) {
-      return $self->{_max_pitch_hook}( $pitch, $self->{_min_pitch},
-        $self->{_max_pitch}, $self );
+      croak "unknown lilypond note $pitch" unless exists $N2P{$real_note};
+
+      # for relative-to-this just need the diatonic
+      $self->{prev_note} =
+        $N2P{$diatonic_note} +
+        $self->reg_sym2num($reg_symbol) * $DEG_IN_SCALE;
+
     } else {
-      die "pitch $pitch is too high\n";
+      croak("unknown pitch '$pitch'");
     }
   }
+  return $self->{prev_note};
+}
 
-  return;
+sub prev_pitch {
+  my ( $self, $pitch ) = @_;
+  if ( defined $pitch ) {
+    if ( blessed $pitch and $pitch->can("pitch") ) {
+      $self->{prev_pitch} = $pitch->pitch;
+    } elsif ( looks_like_number $pitch ) {
+      $self->{prev_pitch} = $pitch;
+    } else {
+      croak("unknown pitch '$pitch'");
+    }
+  }
+  return $self->{prev_pitch};
 }
 
 # Utility, converts arbitrary numbers into lilypond register notation
@@ -450,7 +433,7 @@ sub reg_num2sym {
   my ( $self, $number ) = @_;
   croak "register number must be numeric"
     if !defined $number
-      or !looks_like_number $number;
+    or !looks_like_number $number;
 
   $number = int $number;
   my $symbol = q{};
@@ -466,7 +449,7 @@ sub reg_num2sym {
 sub reg_sym2num {
   my ( $self, $symbol ) = @_;
   croak "undefined register symbol" unless defined $symbol;
-  croak "invalid register symbol" unless $symbol =~ m/^(,|')*$/;
+  croak "invalid register symbol"   unless $symbol =~ m/^(,|')*$/;
 
   my $dir = $symbol =~ m/[,]/ ? -1 : 1;
 
