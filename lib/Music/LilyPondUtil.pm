@@ -202,7 +202,7 @@ sub notes2pitches {
   my $self = shift;
   my @pitches;
 
-  for my $n (@_) {
+  for my $n (ref $_[0] eq 'ARRAY' ? @{ $_[0] } : @_) {
     # pass through what hopefully are raw pitch numbers, otherwise parse
     # note from subset of the lilypond note format
     if ( !defined $n ) {
@@ -311,14 +311,14 @@ sub p2ly {
   my $self = shift;
 
   my @notes;
-  for my $obj (@_) {
+  for my $obj (ref $_[0] eq 'ARRAY' ? @{ $_[0] } : @_) {
     my $pitch;
     if ( !defined $obj ) {
       croak "cannot convert undefined value to lilypond element\n";
     } elsif ( blessed $obj and $obj->can("pitch") ) {
       $pitch = $obj->pitch;
     } elsif ( looks_like_number $obj) {
-      $pitch = $obj;
+      $pitch = int $obj;
     } else {
       # pass through on unknowns (could be rests or who knows what)
       push @notes, $obj;
@@ -420,7 +420,7 @@ sub prev_pitch {
     if ( blessed $pitch and $pitch->can("pitch") ) {
       $self->{prev_pitch} = $pitch->pitch;
     } elsif ( looks_like_number $pitch) {
-      $self->{prev_pitch} = $pitch;
+      $self->{prev_pitch} = int $pitch;
     } else {
       eval { $self->{prev_pitch} = $self->diatonic_pitch($pitch); };
       croak $@ if $@;
@@ -692,7 +692,18 @@ Converts a list of pitches (integers or objects that have a B<pitch>
 method that returns an integer) to a list of lilypond note names.
 Unknown data will be passed through as is. Returns said converted list.
 The behavior of this method depends heavily on various parameters that
-can be passed to B<new> or called as various methods.
+can be passed to B<new> or called as various methods, notably
+the B<prev_pitch> method to set the most recent diatonic pitch.
+
+However, note that B<prev_pitch> will only influence the first note
+(probably in a surprising way). Pitches are pitches, and if they need to
+be transposed to a particular register, run something like:
+
+  $n += 60 for @list_of_pitches;
+
+on all the pitches. Methods from L<Music::Canon> might be another
+option, for example if contrary motion or retrograde must also be
+calculated on the pitches to be transposed.
 
 =item B<prev_note> I<optional note>
 
@@ -802,6 +813,9 @@ L<Music::AtonalUtil> to fold out-of-bounds pitches to within the limits:
 
 L<http://www.lilypond.org/> and most notably the Learning and
 Notation manuals.
+
+My other music related modules, including L<App::MusicTools>,
+L<Music::AtonalUtil>, and L<Music::Canon>.
 
 =head1 AUTHOR
 

@@ -3,8 +3,12 @@
 use strict;
 use warnings;
 
-use Test::More tests => 73;
+use Test::More tests => 74;
 use Test::Exception;
+
+eval 'use Test::Differences';    # display convenience
+my $deeply = $@ ? \&is_deeply : \&eq_or_diff;
+
 BEGIN { use_ok('Music::LilyPondUtil') }
 
 my $lyu = Music::LilyPondUtil->new;
@@ -322,6 +326,17 @@ is( $lyu->prev_pitch, 36, 'previous sticky pitch' );
 # diatonic_pitch internally, might need new n2p or otherwise simple
 # internal routine for such cases if run into conflicts?
 is( $lyu->prev_pitch(q{c'}), 60, 'previous sticky pitch' );
+
+# NOTE the d,,,,, is expected, as pitches are pitches, and unlike note
+# names do not magically jump to the desired register just because
+# prev_pitch was set to something. Transpose all the numbers to the
+# particular register if necessary (e.g. $n += 60 for @pitches, or use
+# some method from Music::Canon).
+$deeply->(
+  [ $lyu->p2ly(qw/2 9 5 2 1 2 4 5/) ],
+  ['d,,,,,', qw/a' f d cis d e f/],
+  'p2ly after prev_pitch relative mode'
+);
 
 $lyu->clear_prev_pitch;
 ok( !defined $lyu->prev_pitch, 'previous pitch cleared' );
