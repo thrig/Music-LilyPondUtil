@@ -12,7 +12,7 @@ use warnings;
 use Carp qw(croak);
 use Scalar::Util qw(blessed looks_like_number);
 
-our $VERSION = '0.50';
+our $VERSION = '0.51';
 
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
@@ -419,10 +419,11 @@ sub prev_pitch {
   if ( defined $pitch ) {
     if ( blessed $pitch and $pitch->can("pitch") ) {
       $self->{prev_pitch} = $pitch->pitch;
-    } elsif ( looks_like_number $pitch ) {
+    } elsif ( looks_like_number $pitch) {
       $self->{prev_pitch} = $pitch;
     } else {
-      croak("unknown pitch '$pitch'");
+      eval { $self->{prev_pitch} = $self->diatonic_pitch($pitch); };
+      croak $@ if $@;
     }
   }
   return $self->{prev_pitch};
@@ -707,7 +708,10 @@ C<c,>, and C<fisfis'''> the pitch for C<f'''>).
 
 For use with B<p2ly>. Get/set previous pitch (the state variable used
 with B<sticky_state> enabled in C<relative> B<mode> to maintain state
-across multiple calls to B<p2ly>).
+across multiple calls to B<p2ly>). Can be a pitch number, or lilypond
+note name, though the lilypond note name will be converted to the
+nearest diatonic pitch number, and may be influenced by various other
+parameters set (notably B<ignore_register>).
 
 =item B<reg_num2sym> I<number>
 

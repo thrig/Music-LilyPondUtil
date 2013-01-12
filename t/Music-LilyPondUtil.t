@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 72;
+use Test::More tests => 73;
 use Test::Exception;
 BEGIN { use_ok('Music::LilyPondUtil') }
 
@@ -317,6 +317,12 @@ is_deeply(
 );
 
 is( $lyu->prev_pitch, 36, 'previous sticky pitch' );
+
+# Can also set previous "pitch" to be a lilypond note. NOTE uses
+# diatonic_pitch internally, might need new n2p or otherwise simple
+# internal routine for such cases if run into conflicts?
+is( $lyu->prev_pitch(q{c'}), 60, 'previous sticky pitch' );
+
 $lyu->clear_prev_pitch;
 ok( !defined $lyu->prev_pitch, 'previous pitch cleared' );
 
