@@ -12,7 +12,7 @@ use warnings;
 use Carp qw(croak);
 use Scalar::Util qw(blessed looks_like_number);
 
-our $VERSION = '0.51';
+our $VERSION = '0.52';
 
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
@@ -478,7 +478,7 @@ Music::LilyPondUtil - utility methods for lilypond data
 
 =head1 SYNOPSIS
 
-  use Music::LilyPondUtil;
+  use Music::LilyPondUtil ();
   my $lyu   = Music::LilyPondUtil->new;
 
   my $pitch = $lyu->notes2pitches("c'") # 60
