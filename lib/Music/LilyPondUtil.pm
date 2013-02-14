@@ -314,7 +314,7 @@ sub p2ly {
   for my $obj (ref $_[0] eq 'ARRAY' ? @{ $_[0] } : @_) {
     my $pitch;
     if ( !defined $obj ) {
-      croak "cannot convert undefined value to lilypond element\n";
+      croak "cannot convert undefined value to lilypond element";
     } elsif ( blessed $obj and $obj->can("pitch") ) {
       $pitch = $obj->pitch;
     } elsif ( looks_like_number $obj) {
