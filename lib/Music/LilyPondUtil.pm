@@ -9,8 +9,8 @@ package Music::LilyPondUtil;
 use 5.010000;
 use strict;
 use warnings;
-use Carp qw(croak);
-use Scalar::Util qw(blessed looks_like_number);
+use Carp qw/croak/;
+use Scalar::Util qw/blessed looks_like_number/;
 
 our $VERSION = '0.52';
 
@@ -89,7 +89,7 @@ sub _symbol2relreg {
 sub chrome {
   my ( $self, $chrome ) = @_;
   if ( defined $chrome ) {
-    croak("chrome must be 'sharps' or 'flats'") unless exists $P2N{$chrome};
+    croak q{chrome must be 'sharps' or 'flats'} unless exists $P2N{$chrome};
     $self->{_chrome} = $chrome;
   }
   return $self->{_chrome};
@@ -110,7 +110,7 @@ sub clear_prev_pitch {
 sub diatonic_pitch {
   my ( $self, $note ) = @_;
 
-  croak "note not defined" unless defined $note;
+  croak 'note not defined' unless defined $note;
 
   my $pitch;
   if ( $note =~ m/^$LY_NOTE_RE/ ) {
@@ -126,7 +126,7 @@ sub diatonic_pitch {
     $pitch %= $DEG_IN_SCALE if $self->{_ignore_register};
 
   } else {
-    croak("unknown note $note");
+    croak "unknown note $note";
   }
 
   return $pitch;
@@ -147,7 +147,7 @@ sub keep_state {
 sub mode {
   my ( $self, $mode ) = @_;
   if ( defined $mode ) {
-    croak("mode must be 'absolute' or 'relative'")
+    croak q{mode must be 'absolute' or 'relative'}
       if $mode ne 'absolute' and $mode ne 'relative';
     $self->{_mode} = $mode;
   }
@@ -159,7 +159,7 @@ sub new {
   my $self = {};
 
   $self->{_chrome} = $param{chrome} || 'sharps';
-  croak("chrome must be 'sharps' or 'flats'")
+  croak q{chrome must be 'sharps' or 'flats'}
     unless exists $P2N{ $self->{_chrome} };
 
   $self->{_keep_state}      = $param{keep_state}      // 1;
@@ -172,23 +172,23 @@ sub new {
   $self->{_max_pitch} = $param{max_pitch} // 108;
 
   if ( exists $param{min_pitch_hook} ) {
-    croak "min_pitch_hook must be code ref"
+    croak 'min_pitch_hook must be code ref'
       unless ref $param{min_pitch_hook} eq 'CODE';
     $self->{_min_pitch_hook} = $param{min_pitch_hook};
   }
   if ( exists $param{max_pitch_hook} ) {
-    croak "max_pitch_hook must be code ref"
+    croak 'max_pitch_hook must be code ref'
       unless ref $param{max_pitch_hook} eq 'CODE';
     $self->{_max_pitch_hook} = $param{max_pitch_hook};
   }
 
   $self->{_mode} = $param{mode} || 'absolute';
-  croak("'mode' must be 'absolute' or 'relative'")
+  croak q{'mode' must be 'absolute' or 'relative'}
     if $self->{_mode} ne 'absolute' and $self->{_mode} ne 'relative';
 
   $self->{_p2n_hook} = $param{p2n_hook}
     || sub { $P2N{ $_[1] }->{ $_[0] % $DEG_IN_SCALE } };
-  croak("'p2n_hook' must be code ref")
+  croak q{'p2n_hook' must be code ref}
     unless ref $self->{_p2n_hook} eq 'CODE';
 
   $self->{_sticky_state} = $param{sticky_state} // 0;
@@ -202,7 +202,7 @@ sub notes2pitches {
   my $self = shift;
   my @pitches;
 
-  for my $n (ref $_[0] eq 'ARRAY' ? @{ $_[0] } : @_) {
+  for my $n ( ref $_[0] eq 'ARRAY' ? @{ $_[0] } : @_ ) {
     # pass through what hopefully are raw pitch numbers, otherwise parse
     # note from subset of the lilypond note format
     if ( !defined $n ) {
@@ -311,7 +311,7 @@ sub p2ly {
   my $self = shift;
 
   my @notes;
-  for my $obj (ref $_[0] eq 'ARRAY' ? @{ $_[0] } : @_) {
+  for my $obj ( ref $_[0] eq 'ARRAY' ? @{ $_[0] } : @_ ) {
     my $pitch;
     if ( !defined $obj ) {
       croak "cannot convert undefined value to lilypond element";
@@ -331,7 +331,10 @@ sub p2ly {
     # * undefined - pitch is within bounds, continue with code below
     my $range_result;
     eval { $range_result = $self->_range_check($pitch); };
-    croak $@ if $@;
+    if ($@) {
+      chomp $@;
+      croak $@;
+    }
     if ( defined $range_result ) {
       push @notes, $range_result;
       next;
@@ -408,7 +411,7 @@ sub prev_note {
         $self->reg_sym2num($reg_symbol) * $DEG_IN_SCALE;
 
     } else {
-      croak("unknown pitch '$pitch'");
+      croak "unknown pitch '$pitch'";
     }
   }
   return $self->{prev_note};
@@ -423,7 +426,10 @@ sub prev_pitch {
       $self->{prev_pitch} = int $pitch;
     } else {
       eval { $self->{prev_pitch} = $self->diatonic_pitch($pitch); };
-      croak $@ if $@;
+      if ($@) {
+        chomp $@;
+        croak $@;
+      }
     }
   }
   return $self->{prev_pitch};
@@ -432,7 +438,7 @@ sub prev_pitch {
 # Utility, converts arbitrary numbers into lilypond register notation
 sub reg_num2sym {
   my ( $self, $number ) = @_;
-  croak "register number must be numeric"
+  croak 'register number must be numeric'
     if !defined $number
     or !looks_like_number $number;
 
@@ -449,8 +455,8 @@ sub reg_num2sym {
 # Utility, converts arbitrary ,, or ''' into appropriate register number
 sub reg_sym2num {
   my ( $self, $symbol ) = @_;
-  croak "undefined register symbol" unless defined $symbol;
-  croak "invalid register symbol"   unless $symbol =~ m/^(,|')*$/;
+  croak 'undefined register symbol' unless defined $symbol;
+  croak 'invalid register symbol'   unless $symbol =~ m/^(,|')*$/;
 
   my $dir = $symbol =~ m/[,]/ ? -1 : 1;
 
