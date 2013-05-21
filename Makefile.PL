@@ -12,6 +12,7 @@ my %params = (
     'Scalar::Util'    => 0,
     'Test::Exception' => 0,
     'Test::More'      => 0,
+    'Try::Tiny'       => 0,
   },
   ( $] >= 5.005
     ? (

@@ -11,6 +11,7 @@ use strict;
 use warnings;
 use Carp qw/croak/;
 use Scalar::Util qw/blessed looks_like_number/;
+use Try::Tiny;
 
 our $VERSION = '0.52';
 
@@ -330,11 +331,10 @@ sub p2ly {
     # * defined return value - got something from a hook function, use that
     # * undefined - pitch is within bounds, continue with code below
     my $range_result;
-    eval { $range_result = $self->_range_check($pitch); };
-    if ($@) {
-      chomp $@;
-      croak $@;
-    }
+    try { $range_result = $self->_range_check($pitch) }
+    catch {
+      croak $_;
+    };
     if ( defined $range_result ) {
       push @notes, $range_result;
       next;
@@ -425,11 +425,10 @@ sub prev_pitch {
     } elsif ( looks_like_number $pitch) {
       $self->{prev_pitch} = int $pitch;
     } else {
-      eval { $self->{prev_pitch} = $self->diatonic_pitch($pitch); };
-      if ($@) {
-        chomp $@;
-        croak $@;
-      }
+      try { $self->{prev_pitch} = $self->diatonic_pitch($pitch) }
+      catch {
+        croak $_;
+      };
     }
   }
   return $self->{prev_pitch};
