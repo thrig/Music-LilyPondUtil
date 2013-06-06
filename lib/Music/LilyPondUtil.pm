@@ -13,7 +13,7 @@ use Carp qw/croak/;
 use Scalar::Util qw/blessed looks_like_number/;
 use Try::Tiny;
 
-our $VERSION = '0.52';
+our $VERSION = '0.53';
 
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
