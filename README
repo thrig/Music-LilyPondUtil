@@ -1,20 +1,33 @@
-Lilypond utility methods - http://www.lilypond.org/
+Music::LilyPondUtil - lilypond utility methods
 
-To install this module, use CPAN, or snag the module from:
+To install this module, use CPAN, for example:
 
-http://github.com/thrig/Music-LilyPondUtil
+  cpan Music::LilyPondUtil
 
-and install it via `cpanm .`
+For the source code, see:
+
+https://github.com/thrig/Music-LilyPondUtil
+
+This can be built and installed by running:
+
+   perl Makefile.PL
+   make
+   make test
+   make install
+
+Run perldoc(1) on Music::LilyPondUtil for more documentation.
 
 DEPENDENCIES
 
-Some knowledge of lilypond and music theory may well benefit the user.
-See the Makefile.PL for module dependencies.
+Some knowledge of lilypond and music theory may well benefit the user. See the
+Makefile.PL for module dependencies.
+
+Also, http://www.lilypond.org/
 
 COPYRIGHT AND LICENCE
 
-Copyright (C) 2012-2013 Jeremy Mates
+Copyright (C) 2012-2013,2015 Jeremy Mates
 
-This library is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself, either Perl version 5.14 or, at
-your option, any later version of Perl 5 you may have available.
+This library is free software; you can redistribute it and/or modify it under
+the same terms as Perl itself, either Perl version 5.14 or, at your option, any
+later version of Perl 5 you may have available.
