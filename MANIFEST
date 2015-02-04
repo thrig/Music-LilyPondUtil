@@ -3,6 +3,7 @@ LICENSE
 MANIFEST
 Makefile.PL
 README
+SIGNATURE
 lib/Music/LilyPondUtil.pm
 t/Music-LilyPondUtil.t
 t/pod.t

@@ -2,7 +2,7 @@
 #
 # http://www.lilypond.org/ related utility code (mostly to transition
 # between Perl processing integers and the related appropriate letter
-# names for the black dots in lilypond).
+# names for the black dots in lilypond). See also Music::PitchNum.
 
 package Music::LilyPondUtil;
 
@@ -13,7 +13,7 @@ use Carp qw/croak/;
 use Scalar::Util qw/blessed looks_like_number/;
 use Try::Tiny;
 
-our $VERSION = '0.53';
+our $VERSION = '0.55';
 
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
@@ -820,18 +820,17 @@ L<http://www.lilypond.org/> and most notably the Learning and
 Notation manuals.
 
 My other music related modules, including L<App::MusicTools>,
-L<Music::AtonalUtil>, and L<Music::Canon>.
+L<Music::AtonalUtil>, L<Music::Canon>, and L<Music::PitchNum>.
 
 =head1 AUTHOR
 
-Jeremy Mates, E<lt>jmates@cpan.orgE<gt>
+thrig - Jeremy Mates (cpan:JMATES) C<< <jmates at cpan.org> >>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2012-2013 by Jeremy Mates
+Copyright (C) 2012-2013,2015 Jeremy Mates
 
-This library is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself, either Perl version 5.16 or, at
-your option, any later version of Perl 5 you may have available.
+This module is free software; you can redistribute it and/or modify it
+under the Artistic License (2.0).
 
 =cut
