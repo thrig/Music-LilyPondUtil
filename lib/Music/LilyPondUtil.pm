@@ -13,7 +13,7 @@ use Carp qw/croak/;
 use Scalar::Util qw/blessed looks_like_number/;
 use Try::Tiny;
 
-our $VERSION = '0.55';
+our $VERSION = '0.56';
 
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
@@ -43,6 +43,139 @@ my %P2N = (
 my %TTDIR = (
   flats  => {qw/0 -1 1 1 2 -1 3 1 4 -1 5 1 6 1 7 -1 8 1 9 -1 10 1 11 -1/},
   sharps => {qw/0 1 1 -1 2 1 3 -1 4 1 5 1 6 -1 7 1 8 -1 9 1 10 -1 11 -1/},
+);
+
+# on loan from scm/midi.scm of lilypond fame (and possibly also some
+# MIDI specification somewhere?)
+my %PATCH2INSTRUMENT = (
+  0   => "acoustic grand",
+  1   => "bright acoustic",
+  2   => "electric grand",
+  3   => "honky-tonk",
+  4   => "electric piano 1",
+  5   => "electric piano 2",
+  6   => "harpsichord",
+  7   => "clav",
+  8   => "celesta",
+  9   => "glockenspiel",
+  10  => "music box",
+  11  => "vibraphone",
+  12  => "marimba",
+  13  => "xylophone",
+  14  => "tubular bells",
+  15  => "dulcimer",
+  16  => "drawbar organ",
+  17  => "percussive organ",
+  18  => "rock organ",
+  19  => "church organ",
+  20  => "reed organ",
+  21  => "accordion",
+  22  => "harmonica",
+  23  => "concertina",
+  24  => "acoustic guitar (nylon)",
+  25  => "acoustic guitar (steel)",
+  26  => "electric guitar (jazz)",
+  27  => "electric guitar (clean)",
+  28  => "electric guitar (muted)",
+  29  => "overdriven guitar",
+  30  => "distorted guitar",
+  31  => "guitar harmonics",
+  32  => "acoustic bass",
+  33  => "electric bass (finger)",
+  34  => "electric bass (pick)",
+  35  => "fretless bass",
+  36  => "slap bass 1",
+  37  => "slap bass 2",
+  38  => "synth bass 1",
+  39  => "synth bass 2",
+  40  => "violin",
+  41  => "viola",
+  42  => "cello",
+  43  => "contrabass",
+  44  => "tremolo strings",
+  45  => "pizzicato strings",
+  46  => "orchestral harp",
+  47  => "timpani",
+  48  => "string ensemble 1",
+  49  => "string ensemble 2",
+  50  => "synthstrings 1",
+  51  => "synthstrings 2",
+  52  => "choir aahs",
+  53  => "voice oohs",
+  54  => "synth voice",
+  55  => "orchestra hit",
+  56  => "trumpet",
+  57  => "trombone",
+  58  => "tuba",
+  59  => "muted trumpet",
+  60  => "french horn",
+  61  => "brass section",
+  62  => "synthbrass 1",
+  63  => "synthbrass 2",
+  64  => "soprano sax",
+  65  => "alto sax",
+  66  => "tenor sax",
+  67  => "baritone sax",
+  68  => "oboe",
+  69  => "english horn",
+  70  => "bassoon",
+  71  => "clarinet",
+  72  => "piccolo",
+  73  => "flute",
+  74  => "recorder",
+  75  => "pan flute",
+  76  => "blown bottle",
+  77  => "shakuhachi",
+  78  => "whistle",
+  79  => "ocarina",
+  80  => "lead 1 (square)",
+  81  => "lead 2 (sawtooth)",
+  82  => "lead 3 (calliope)",
+  83  => "lead 4 (chiff)",
+  84  => "lead 5 (charang)",
+  85  => "lead 6 (voice)",
+  86  => "lead 7 (fifths)",
+  87  => "lead 8 (bass+lead)",
+  88  => "pad 1 (new age)",
+  89  => "pad 2 (warm)",
+  90  => "pad 3 (polysynth)",
+  91  => "pad 4 (choir)",
+  92  => "pad 5 (bowed)",
+  93  => "pad 6 (metallic)",
+  94  => "pad 7 (halo)",
+  95  => "pad 8 (sweep)",
+  96  => "fx 1 (rain)",
+  97  => "fx 2 (soundtrack)",
+  98  => "fx 3 (crystal)",
+  99  => "fx 4 (atmosphere)",
+  100 => "fx 5 (brightness)",
+  101 => "fx 6 (goblins)",
+  102 => "fx 7 (echoes)",
+  103 => "fx 8 (sci-fi)",
+  104 => "sitar",
+  105 => "banjo",
+  106 => "shamisen",
+  107 => "koto",
+  108 => "kalimba",
+  109 => "bagpipe",
+  110 => "fiddle",
+  111 => "shanai",
+  112 => "tinkle bell",
+  113 => "agogo",
+  114 => "steel drums",
+  115 => "woodblock",
+  116 => "taiko drum",
+  117 => "melodic tom",
+  118 => "synth drum",
+  119 => "reverse cymbal",
+  120 => "guitar fret noise",
+  121 => "breath noise",
+  122 => "seashore",
+  123 => "bird tweet",
+  124 => "telephone ring",
+  125 => "helicopter",
+  126 => "applause",
+  127 => "gunshot",
 );
 
 ########################################################################
@@ -122,8 +255,7 @@ sub diatonic_pitch {
 
     croak "unknown lilypond note $note" unless exists $N2P{$real_note};
 
-    $pitch =
-      $N2P{$diatonic_note} + $self->reg_sym2num($reg_symbol) * $DEG_IN_SCALE;
+    $pitch = $N2P{$diatonic_note} + $self->reg_sym2num($reg_symbol) * $DEG_IN_SCALE;
     $pitch %= $DEG_IN_SCALE if $self->{_ignore_register};
 
   } else {
@@ -262,11 +394,9 @@ sub notes2pitches {
           }
 
         } else {                                # meat of relativity
-          my $reg_number =
-            int( $self->{prev_note} / $DEG_IN_SCALE ) * $DEG_IN_SCALE;
+          my $reg_number = int( $self->{prev_note} / $DEG_IN_SCALE ) * $DEG_IN_SCALE;
 
-          my $reg_delta =
-            $self->{prev_note} % $DEG_IN_SCALE - $N2P{$diatonic_note};
+          my $reg_delta = $self->{prev_note} % $DEG_IN_SCALE - $N2P{$diatonic_note};
           if ( abs($reg_delta) > $TRITONE ) {
             $reg_number += $reg_delta > 0 ? $DEG_IN_SCALE : -$DEG_IN_SCALE;
           }
@@ -357,8 +487,7 @@ sub p2ly {
 
             # Adjust for tricky changing tritone default direction
             my $default_dir =
-              $TTDIR{ $self->{_chrome} }
-              ->{ $self->{prev_pitch} % $DEG_IN_SCALE };
+              $TTDIR{ $self->{_chrome} }->{ $self->{prev_pitch} % $DEG_IN_SCALE };
             if ( $delta > 0 and $default_dir < 0 ) {
               $rel_reg++;
             } elsif ( $delta < 0 and $default_dir > 0 ) {
@@ -368,8 +497,7 @@ sub p2ly {
           } else {    # not tritone, but leap
                       # TT adjust is to push <1 leaps out so become 1
             $rel_reg +=
-              int( ( $delta + ( $delta > 0 ? $TRITONE : -$TRITONE ) ) /
-                $DEG_IN_SCALE );
+              int( ( $delta + ( $delta > 0 ? $TRITONE : -$TRITONE ) ) / $DEG_IN_SCALE );
           }
         }
       }
@@ -391,6 +519,13 @@ sub p2ly {
   return @_ > 1 ? @notes : $notes[0];
 }
 
+# Class method, patch number to instrument name utility function
+sub patch2instrument {
+  my ( $class, $patchnum ) = @_;
+
+  return $PATCH2INSTRUMENT{$patchnum} // '';
+}
+
 # MUST NOT accept raw pitch numbers, as who knows if "61" is a "cis"
 # or "des" or the like, which will in turn affect the relative
 # calculations!
@@ -407,8 +542,7 @@ sub prev_note {
 
       # for relative-to-this just need the diatonic
       $self->{prev_note} =
-        $N2P{$diatonic_note} +
-        $self->reg_sym2num($reg_symbol) * $DEG_IN_SCALE;
+        $N2P{$diatonic_note} + $self->reg_sym2num($reg_symbol) * $DEG_IN_SCALE;
 
     } else {
       croak "unknown pitch '$pitch'";
@@ -522,7 +656,7 @@ nor double flats. Pitch numbers are integers, and might be the MIDI note
 numbers, or based around 0, or whatever, depending on the need and the
 parameters set.
 
-=head1 METHODS
+=head1 CLASS METHODS
 
 The module will throw errors via B<croak> if an abnormal condition is
 encountered.
@@ -635,6 +769,19 @@ would take more work to implement. It would, however, better suit
 larger data sets.)
 
 =back
+
+=item B<patch2instrument> I<patch_number>
+
+Given a MIDI patch number (presumably in the range from 0 to 127,
+inclusive), returns the instrument name (or otherwise the empty string).
+
+=back
+
+=head1 METHODS
+
+Call these on an object created via B<new>.
+
+=over 4
 
 =item B<chrome> I<optional sharps or flats>
 

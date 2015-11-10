@@ -3,16 +3,25 @@
 use strict;
 use warnings;
 
-use Test::More tests => 74;
-use Test::Exception;
+use Test::Most;    # plan is down at bottom
 
-eval 'use Test::Differences';    # display convenience
-my $deeply = $@ ? \&is_deeply : \&eq_or_diff;
+my $deeply = \&eq_or_diff;
 
-BEGIN { use_ok('Music::LilyPondUtil') }
+use Music::LilyPondUtil;
+
+########################################################################
+#
+# class methods (just one. okay, two).
 
 my $lyu = Music::LilyPondUtil->new;
 isa_ok( $lyu, 'Music::LilyPondUtil' );
+
+is( Music::LilyPondUtil->patch2instrument(10),   'music box', 'a box' );
+is( Music::LilyPondUtil->patch2instrument(-261), '',          'no such patch' );
+
+########################################################################
+#
+# "piano white key" utility method
 
 is( $lyu->diatonic_pitch(q{c'}),     60, 'diatonic to diatonic' );
 is( $lyu->diatonic_pitch(q{ceses'}), 60, 'not diatonic to diatonic' );
@@ -334,7 +343,7 @@ is( $lyu->prev_pitch(q{c'}), 60, 'previous sticky pitch' );
 # some method from Music::Canon).
 $deeply->(
   [ $lyu->p2ly(qw/2 9 5 2 1 2 4 5/) ],
-  ['d,,,,,', qw/a' f d cis d e f/],
+  [ 'd,,,,,', qw/a' f d cis d e f/ ],
   'p2ly after prev_pitch relative mode'
 );
 
@@ -365,3 +374,5 @@ $lyu = Music::LilyPondUtil->new(
 
 is( $lyu->p2ly(-999), 'r', 'min pitch hook' );
 is( $lyu->p2ly(999),  's', 'max pitch hook' );
+
+plan tests => 75;
