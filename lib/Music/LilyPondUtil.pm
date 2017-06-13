@@ -11,9 +11,8 @@ use strict;
 use warnings;
 use Carp qw/croak/;
 use Scalar::Util qw/blessed looks_like_number/;
-use Try::Tiny;
 
-our $VERSION = '0.56';
+our $VERSION = '0.57';
 
 # Since dealing with lilypond, assume 12 pitch material
 my $DEG_IN_SCALE = 12;
@@ -461,10 +460,8 @@ sub p2ly {
     # * defined return value - got something from a hook function, use that
     # * undefined - pitch is within bounds, continue with code below
     my $range_result;
-    try { $range_result = $self->_range_check($pitch) }
-    catch {
-      croak $_;
-    };
+    eval { $range_result = $self->_range_check($pitch) };
+    croak $@ if $@;
     if ( defined $range_result ) {
       push @notes, $range_result;
       next;
@@ -559,10 +556,8 @@ sub prev_pitch {
     } elsif ( looks_like_number $pitch) {
       $self->{prev_pitch} = int $pitch;
     } else {
-      try { $self->{prev_pitch} = $self->diatonic_pitch($pitch) }
-      catch {
-        croak $_;
-      };
+      eval { $self->{prev_pitch} = $self->diatonic_pitch($pitch) };
+      croak $@ if $@;
     }
   }
   return $self->{prev_pitch};

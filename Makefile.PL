@@ -31,7 +31,6 @@ my %params = (
   PREREQ_PM    => {
     Carp              => 0,
     'Scalar::Util'    => 0,
-    'Try::Tiny'       => 0,
   },
 
   META_MERGE => {
